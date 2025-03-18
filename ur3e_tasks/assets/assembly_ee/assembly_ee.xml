@@ -1,0 +1,24 @@
+<mujoco model="assembly_ee">
+  <compiler angle="radian" />
+  <option timestep="0.001"/>
+  <worldbody>
+    <!-- Base: positioned so that its bottom touches z=0 -->
+    <body name="base" pos="0 0 0">
+      <geom name="base_geom" type="cylinder" size="0.0315 0.01" rgba="0.8 0.8 0.8 1"/>
+      
+      <!-- Cylinder: attached on top of the base -->
+      <!-- The cylinder body is positioned so that its center is 0.03 m above the base's center,
+           meaning its bottom (center - 0.02 m) aligns with the top of the base at z=0.02 -->
+      <body name="cylinder" pos="0 0 0.03">
+        <geom name="cylinder_geom" type="cylinder" size="0.0125 0.02" rgba="0.2 0.2 0.8 1"/>
+        
+        <!-- Tip: attached on top of the cylinder -->
+        <!-- Positioned so that its center is 0.03 m above the cylinder's center (0.02 m to reach the top of the cylinder plus 0.01 m half-depth of the tip) -->
+        <body name="tip" pos="0 0 0.025">
+          <!-- Tip geom: box with half-sizes (0.02, 0.0125, 0.01) corresponding to (40mm, 25mm, 20mm) overall -->
+          <geom name="tip_geom" type="box" size="0.0315 0.0125 0.005" rgba="0.2 0.2 0.8 1"/>
+        </body>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>

@@ -1,0 +1,2 @@
+from ur3e_tasks.envs.ur3e_peg_in_hole_env import UR3ePegInHoleEnv
+from ur3e_tasks.envs.ur3e_assembly_env import UR3eAssemblyEnv
