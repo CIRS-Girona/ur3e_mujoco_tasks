@@ -9,7 +9,7 @@ class AssemblyArena(object):
 
         xml_path= os.path.join(
                 os.path.dirname(__file__),
-                '../assets/assembly_hole/assembly_hole.xml',
+                '../assets/assembly/assembly_scene.xml',
             )
 
         self._mjcf_model = mjcf.from_path(xml_path)

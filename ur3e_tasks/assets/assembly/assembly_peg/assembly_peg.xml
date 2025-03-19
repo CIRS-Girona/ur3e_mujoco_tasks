@@ -5,7 +5,8 @@
     <!-- peg_pickup (site) : top position for picking up
     peg_base (site) : bottom postion of peg   -->
 
-    <body name="peg_base" pos="0 0 0">
+    <body name="peg_base" pos="0.2 -0.2 1">
+      <joint name="peg_freejoint" type="free" />
         <site name="peg_base" pos="0 0 0.00" group="4"/>
         <body name="peg_box" pos="0 0 0.005">
           <!-- Tip geom: box with half-sizes (0.02, 0.0125, 0.01) corresponding to (40mm, 25mm, 20mm) overall -->
