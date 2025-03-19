@@ -1,0 +1,51 @@
+<mujoco model="suction">
+  <!--
+  simple suction model
+  -->
+  <compiler angle="radian" meshdir="assets" autolimits="true"/>
+
+  <default>
+    <default class="mechanical">
+      <geom rgba=".5 .5 .8 1"/>
+      <tendon rgba=".5 .5 .8 1"/>
+    </default>
+    <default class="active_adhesion">
+      <!--
+        Geoms in the active_adhesion class are "inflated" with a margin of 1cm, but contacts are
+        activated only at a depth gap of 1cm, leading to a layer of inactive contacts at a 1cm
+        distance from the surface. However the contacts can be used by the adhesion actuator.
+      -->
+      <geom rgba=".8 .5 .5 1" margin="0.0" gap="0.0"/>
+    </default>
+  </default>
+
+  <worldbody>
+
+    <body name="base" pos="0 0 0">
+      <geom name="suction_base" type="cylinder" size="0.0315 0.01" rgba="0.8 0.8 0.8 1"/>
+      
+
+      <body name="suction_tip" pos="0 0 0.02" childclass="active_adhesion">
+            <site name="force_sensor" group="3"/>
+          <joint name="arm3" damping=".01" pos="0 -.03 0"/>
+          <geom size=".01 .01 .01" pos="0.005 0.005 0" type="box"/>
+          <geom size=".01 .01 .01" pos="0.005 -.005 0" type="box"/>
+          <geom size=".01 .01 .01" pos="-.005 0.005 0" type="box"/>
+          <geom size=".01 .01 .01" pos="-.005 -.005 0" type="box"/>
+        
+      </body>
+
+     
+    </body>
+
+
+  </worldbody>
+
+  <actuator>
+    <adhesion name="suction_actuator" body="suction_tip" ctrlrange="0 1" gain="200"/>
+  </actuator>
+
+  <sensor>
+    <force site="force_sensor"/>
+  </sensor>
+</mujoco>

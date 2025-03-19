@@ -1,0 +1,21 @@
+<mujoco model="assembly_peg">
+  <compiler angle="radian" />
+  <option timestep="0.001"/>
+  <worldbody>
+    <!-- peg_pickup (site) : top position for picking up
+    peg_base (site) : bottom postion of peg   -->
+
+    <body name="peg_base" pos="0 0 0">
+        <site name="peg_base" pos="0 0 0.00" group="4"/>
+        <body name="peg_box" pos="0 0 0.005">
+          <!-- Tip geom: box with half-sizes (0.02, 0.0125, 0.01) corresponding to (40mm, 25mm, 20mm) overall -->
+          <geom name="tip_geom" type="box" size="0.0315 0.0125 0.005" rgba="0.2 0.2 0.8 1"/>
+        </body>
+      <body name="cylinder" pos="0 0 0.03">
+        <geom name="cylinder_geom" type="cylinder" size="0.0125 0.02" rgba="0.2 0.2 0.8 1"/>
+        <site name="peg_pickup" pos="0 0 0.02" group="4"/>  
+      </body>
+      
+    </body>
+  </worldbody>
+</mujoco>
