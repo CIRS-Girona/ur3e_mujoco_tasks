@@ -15,7 +15,7 @@
         activated only at a depth gap of 1cm, leading to a layer of inactive contacts at a 1cm
         distance from the surface. However the contacts can be used by the adhesion actuator.
       -->
-      <geom rgba=".8 .5 .5 1" margin="0.0" gap="0.0"/>
+      <geom rgba=".8 .5 .5 1" margin="0.01" gap="0.01"/>
     </default>
   </default>
 
@@ -27,11 +27,11 @@
 
       <body name="suction_tip" pos="0 0 0.02" childclass="active_adhesion">
             <site name="force_sensor" group="3"/>
-          <joint name="arm3" damping=".01" pos="0 -.03 0"/>
-          <geom size=".01 .01 .01" pos="0.005 0.005 0" type="box"/>
-          <geom size=".01 .01 .01" pos="0.005 -.005 0" type="box"/>
-          <geom size=".01 .01 .01" pos="-.005 0.005 0" type="box"/>
-          <geom size=".01 .01 .01" pos="-.005 -.005 0" type="box"/>
+          <!-- <joint name="arm3" damping=".01" pos="0 -.03 0"/> -->
+          <geom size=".01 .01 .01" pos="0.005 0.005 0" type="box" solref="0.02 1" solimp="0.8 0.9 0.001 0.5 2" density="500" />
+          <geom size=".01 .01 .01" pos="0.005 -.005 0" type="box" solref="0.02 1" solimp="0.8 0.9 0.001 0.5 2" density="500"/>
+          <geom size=".01 .01 .01" pos="-.005 0.005 0" type="box" solref="0.02 1" solimp="0.8 0.9 0.001 0.5 2" density="500"/>
+          <geom size=".01 .01 .01" pos="-.005 -.005 0" type="box" solref="0.02 1" solimp="0.8 0.9 0.001 0.5 2" density="500"/>
         
       </body>
 
@@ -42,7 +42,7 @@
   </worldbody>
 
   <actuator>
-    <adhesion name="suction_actuator" body="suction_tip" ctrlrange="0 1" gain="200"/>
+    <adhesion name="suction_actuator" body="suction_tip" ctrlrange="0 1" gain="50"/>
   </actuator>
 
   <sensor>

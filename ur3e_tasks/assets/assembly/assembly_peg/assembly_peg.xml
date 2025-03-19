@@ -13,7 +13,7 @@
           <geom name="tip_geom" type="box" size="0.0315 0.0125 0.005" rgba="0.2 0.2 0.8 1"/>
         </body>
       <body name="cylinder" pos="0 0 0.03">
-        <geom name="cylinder_geom" type="cylinder" size="0.0125 0.02" rgba="0.2 0.2 0.8 1"/>
+        <geom name="cylinder_geom" type="cylinder" size="0.0125 0.02" rgba="0.2 0.2 0.8 1"  friction="1.0 0.05 0.001"/>
         <site name="peg_pickup" pos="0 0 0.02" group="4"/>  
       </body>
       
