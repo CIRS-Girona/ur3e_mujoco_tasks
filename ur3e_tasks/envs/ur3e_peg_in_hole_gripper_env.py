@@ -34,7 +34,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self._render_mode = render_mode
-        self.show_cam = False
+        self.show_cam = True
         ############################
         # create MJCF model
         ############################
@@ -55,16 +55,10 @@ class UR3ePegInHoleEnv(gym.Env):
             eef_site_name='eef_site',
             attachment_site_name='attachment_site'
         )
-
-        # Load assembly end effector
-        current_dir = os.path.dirname(__file__)
-        file_path = os.path.join(current_dir, '..', 'assets','peg-in-hole','peg_ee', 'peg_ee.xml')
-        xml_path = os.path.abspath(file_path)
-        peg_ee = mjcf.from_path(xml_path)
-
-        # attach EE to arm
-        self._arm.attach_tool(peg_ee, pos=[0, 0, 0], quat=[0, 0, 0, 1])
-
+        # ag95 gripper
+        self._gripper = RT2F85()
+        # attach gripper to arm
+        self._arm.attach_tool(self._gripper.mjcf_model, pos=[0, 0, 0], quat=[0, 0, 0, 1])
          # attach arm to arena
         self._arena.attach(
             self._arm.mjcf_model, pos=[0,0,1.1], quat=[0.7071068, 0, 0, -0.7071068]
@@ -72,7 +66,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
 
         # Peg and Hole
-        # self._peg = self._arena.mjcf_model.find('joint', "peg_freejoint")
+        self._peg = self._arena.mjcf_model.find('joint', "peg_freejoint")
         self._hole = self._arena.mjcf_model.find('body', "hole")
        
         
@@ -133,13 +127,13 @@ class UR3ePegInHoleEnv(gym.Env):
                 #set gravity to zero
                 self._physics.model.opt.gravity = [0,0,0]
 
-                # # put peg into gripper position
-                # gripper_pose = self._arm.get_eef_pose(self._physics)
-                # gripper_pose[2] = gripper_pose[2] - 0.2
-                # self._physics.bind(self._peg).qpos[:3] = gripper_pose[:3]
+                # put peg into gripper position
+                gripper_pose = self._arm.get_eef_pose(self._physics)
+                gripper_pose[2] = gripper_pose[2] - 0.2
+                self._physics.bind(self._peg).qpos[:3] = gripper_pose[:3]
 
-                # # set gripper to be active to hold the peg
-                # self._physics.bind(self._gripper._actuator).ctrl = 250
+                # set gripper to be active to hold the peg
+                self._physics.bind(self._gripper._actuator).ctrl = 250
 
                 self._physics.step()
                 if self._render_mode == "human":
@@ -153,7 +147,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
             # put target in a reasonable starting position
             hole_pos = self._physics.bind(self._hole).xpos.copy()
-            hole_pos[2] = hole_pos[2] + 0.2
+            hole_pos[2] = hole_pos[2] + 0.4
             self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
 
         
@@ -172,7 +166,7 @@ class UR3ePegInHoleEnv(gym.Env):
             pass
         elif self.i < 2500:
             hole_pos = self._physics.bind(self._hole).xpos.copy()
-            hole_pos[2] = hole_pos[2] + 0.12
+            hole_pos[2] = hole_pos[2] + 0.25
             self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
         else:
             terminated = True

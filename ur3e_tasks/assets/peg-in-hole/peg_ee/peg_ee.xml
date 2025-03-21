@@ -1,0 +1,17 @@
+<mujoco model="peg_ee">
+  <compiler angle="radian" />
+  <option timestep="0.001"/>
+  <worldbody>
+    <!-- Base: positioned so that its bottom touches z=0 -->
+    <body name="base" pos="0 0 0">
+      <geom name="base_geom" type="cylinder" size="0.0315 0.01" rgba="0.8 0.8 0.8 1"/>
+      
+      <!-- Cylinder: attached on top of the base -->
+      <!-- The cylinder body is positioned so that its center is 0.03 m above the base's center,
+           meaning its bottom (center - 0.02 m) aligns with the top of the base at z=0.02 -->
+      <body name="cylinder" pos="0 0 0.05">
+        <geom name="cylinder_geom" type="cylinder" size="0.022 0.06" rgba="0.2 0.2 0.8 1"/>
+      </body>
+    </body>
+  </worldbody>
+</mujoco>
