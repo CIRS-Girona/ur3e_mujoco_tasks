@@ -4,7 +4,8 @@
 
   <worldbody>
    <!-- table top is @ 1 m -->
-    <body name="hole" pos="0.4 0.15 1.05" quat="1 0 0 0">
+    <body name="hole" pos="0.4 0.15 1.05" quat="1 0 0 0" mocap="true">
+
       <body name="down" pos="-0.00 -0.04 0.0" quat="1 0 0 0">
         <geom name="down_geom" type="box" size="0.04 0.02  0.005" rgba="0.8 0.8 0.8 1"/>
       </body>
@@ -21,4 +22,5 @@
     </body>
     
   </worldbody>
+
 </mujoco>

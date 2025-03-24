@@ -14,7 +14,7 @@
         
         <!-- Tip: attached on top of the cylinder -->
         <!-- Positioned so that its center is 0.03 m above the cylinder's center (0.02 m to reach the top of the cylinder plus 0.01 m half-depth of the tip) -->
-        <body name="tip" pos="0 0 0.025">
+        <body name="tip" pos="0 0 0.025" euler = "0 0 1.5704">
           <!-- Tip geom: box with half-sizes (0.02, 0.0125, 0.01) corresponding to (40mm, 25mm, 20mm) overall -->
           <geom name="tip_geom" type="box" size="0.0315 0.0125 0.005" rgba="0.2 0.2 0.8 1"/>
         </body>

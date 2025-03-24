@@ -2,7 +2,7 @@
   <compiler angle="radian" />
   <option timestep="0.001"/>
   <include file="assembly_hole/assembly_hole.xml"/>
-  <include file="assembly_peg/assembly_peg.xml"/>
+  <!-- <include file="assembly_peg/assembly_peg.xml"/> -->
 
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
@@ -15,7 +15,9 @@
   </asset>
 
   <worldbody>
+
     <body name="floor" pos="0 0 0">
+      
       <geom type="plane" size="2 2 0.1" material="grid"/>
     </body>
     
@@ -28,10 +30,19 @@
         <geom type="cylinder" size="0.05 0.5" pos="1.0 1.0 0.5" material="Wood"/>       
     </body>
     
+    <!-- workspace defined with two cylinder: outer - inner -->
+    <body name="outer_workspace" pos="0.0 0.0 1.0" euler="0  0.0  0">
+        <geom  type="cylinder" size="0.5 0.001" rgba="0 1 0 0.2" conaffinity="0" contype="0" group="4"/>
+    </body>
+    <body name="inner_workspace" pos="0.0 0.0 1.0" euler="0  0.0  0">
+        <geom  type="cylinder" size="0.23 0.001" rgba="1 0 0 0.2" conaffinity="0" contype="0" group="4"/>
+    </body>
     
     <body name="camera_center" euler="0  0.0  0" pos="0.0 0.0 1.0"></body>
     <body name="fixed_camera_body" euler="0  0  0" pos="0.7 0.25 1.7">
       <camera name="fixed_camera"  mode="targetbody" target="camera_center" fovy="42.5" />
     </body>
+
+    <body name="base_anchor" mocap="true" pos="0 0 1.0"/>
   </worldbody>
 </mujoco>
