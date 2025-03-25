@@ -11,6 +11,9 @@
            meaning its bottom (center - 0.02 m) aligns with the top of the base at z=0.02 -->
       <body name="cylinder" pos="0 0 0.05">
         <geom name="cylinder_geom" type="cylinder" size="0.022 0.06" rgba="0.2 0.2 0.8 1"/>
+        
+        <!-- Endpoint of the peg (useful to get the position)-->
+        <body name="peg_end" pos="0 0 0.06"/>
       </body>
     </body>
   </worldbody>

@@ -146,4 +146,9 @@
   <!-- <keyframe>
     <key name="home" qpos="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0" ctrl="-1.5708 -1.5708 1.5708 -1.5708 -1.5708 0"/>
   </keyframe> -->
+
+  <sensor>
+    <force name="ee_force" site="attachment_site"/>
+    <torque name="ee_torque" site="attachment_site"/>
+  </sensor>
 </mujoco>

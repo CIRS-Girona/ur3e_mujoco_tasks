@@ -24,7 +24,7 @@ class UR3ePegInHoleEnv(gym.Env):
     def __init__(self, render_mode=None):
         # TODO come up with an observation space that makes sense
         self.observation_space = spaces.Box(
-            low=-np.inf, high=np.inf, shape=(6,), dtype=np.float64
+            low=-np.inf, high=np.inf, shape=(8,), dtype=np.float64
         )
 
         # TODO come up with an action space that makes sense
@@ -106,7 +106,17 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def _get_obs(self) -> np.ndarray:
         # TODO come up with an observations that makes sense for your RL task
-        return np.zeros(6)
+        # end-effector force-torque
+        force = self._physics.data.sensor('ur3e/ee_force').data
+        torque = self._physics.data.sensor('ur3e/ee_torque').data
+        # position of the hole w.r.t. peg (x and y coordinates)
+        hole_pos = self._physics.bind(self._hole).xpos.copy()[:2]
+        peg_pos = self._physics.named.data.xpos['ur3e/peg_ee/peg_end'][:2]
+        # NOTE: should I define peg_pos from the joints instead of directly from sim data?
+        hole_wrt_peg = hole_pos - peg_pos
+        # print("hole pos wrt peg = ",hole_wrt_peg)
+        return np.concatenate((force,torque,hole_wrt_peg)) #NOTE: how about self.observation_space?
+        # return np.zeros(6)
 
     def _get_info(self) -> dict:
         # TODO come up with an info dict that makes sense for your RL task

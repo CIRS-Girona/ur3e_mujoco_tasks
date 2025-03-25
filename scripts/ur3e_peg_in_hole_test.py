@@ -17,16 +17,21 @@ observation, info = env.reset(seed=42)
 
 # Run simulation for a fixed number of steps
 # for _ in range(1000):
+i = 0
 while True:
+    i+=1
     # Choose a random action from the available action space
     action = env.action_space.sample()
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
+    if i%100==0:
+        print(observation)
     # print(action)
     # Check if the episode is over (terminated) or max steps reached (truncated)
     if terminated or truncated:
         # If the episode ends or is truncated, reset the environment
         observation, info = env.reset()
+        i = 0
 
 # Close the environment when the simulation is done
 env.close()
