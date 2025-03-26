@@ -9,7 +9,7 @@ from manipulator_mujoco.robots import Arm
 from ur3e_tasks.arenas import AssemblyArena
 from ur3e_tasks.robots import Suction, RT2F85
 
-
+from ur3e_tasks.utils import  DomainRandomizer
 from manipulator_mujoco.mocaps import Target
 from manipulator_mujoco.controllers import OperationalSpaceController
 from ur3e_tasks.robots import Camera
@@ -86,9 +86,8 @@ class UR3eAssemblyEnv(gym.Env):
             self._arm.mjcf_model, pos=[0,0,1], quat=[0.7071068, 0, 0, -0.7071068]
         )
 
-        # connect arm to mocap object
-        self._arena._mjcf_model.equality.add("weld",name="arm_connect",body1="base_anchor",body2="ur3e/base",anchor="0 0 0 ",active="true")
 
+        self._randomizer = DomainRandomizer(self._arena._mjcf_model)
 
         # self._weld = self._gripper.setup_weld(self._arena.mjcf_model,"peg" )
         # self.complie_model()
@@ -132,6 +131,21 @@ class UR3eAssemblyEnv(gym.Env):
         super().reset(seed=seed)
         # reset flags
         self.i = 0
+        # domain randomize
+        self._randomizer.random_object_in_ws("hole")
+        self._randomizer.random_texture("table_top")
+        self._randomizer.random_texture("wall_left")
+        self._randomizer.random_texture("wall_right")
+        self._randomizer.random_texture("wall_back")
+        self._randomizer.random_light("light_source")
+        self._randomizer.random_object_color("hole")
+        self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+        self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+        self._randomizer.random_arm_height("ur3e/base")
+        self._randomizer.random_fixed_camera("fixed_camera","camera_center")
+        self._randomizer.random_distractors()
+        self._randomizer.random_texture_arm(self._arm)
+
         # recomplie model
         self.complie_model()
         # reset physics
@@ -173,7 +187,7 @@ class UR3eAssemblyEnv(gym.Env):
             hole_pos = self._physics.bind(self._hole).xpos.copy()
             hole_pos[2] = hole_pos[2] + 0.002
             self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
-        elif self.i < 3000: # rotate peg inside the hole
+        elif self.i < 2500: # rotate peg inside the hole
             hole_pos = self._physics.bind(self._hole).xpos.copy()
             hole_pos[2] = hole_pos[2] + 0.002
             self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0.7071068, 0.7071068])

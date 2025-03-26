@@ -14,9 +14,9 @@ class AssemblyArena(object):
 
         self._mjcf_model = mjcf.from_path(xml_path)
 
-        # add light sources
-        for x in [-2, 2]:
-            self._mjcf_model.worldbody.add("light", pos=[x, -1, 3], dir=[-x, 1, -2])
+        # # add light sources
+        # for x in [-2, 2]:
+        #     self._mjcf_model.worldbody.add("light", pos=[x, -1, 3], dir=[-x, 1, -2])
     
         
     

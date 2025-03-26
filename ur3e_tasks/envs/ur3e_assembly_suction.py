@@ -82,9 +82,6 @@ class UR3eAssemblyEnv(gym.Env):
             self._arm.mjcf_model, pos=[0,0,1], quat=[0.7071068, 0, 0, -0.7071068]
         )
 
-        # connect arm to mocap object
-        self._arena._mjcf_model.equality.add("weld",name="arm_connect",body1="base_anchor",body2="ur3e/base",anchor="0 0 0 ",active="true")
-
 
         # self._weld = self._gripper.setup_weld(self._arena.mjcf_model,"peg" )
         # self.complie_model()
