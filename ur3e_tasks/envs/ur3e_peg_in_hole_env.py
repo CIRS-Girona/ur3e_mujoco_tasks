@@ -61,9 +61,12 @@ class UR3ePegInHoleEnv(gym.Env):
         file_path = os.path.join(current_dir, '..', 'assets','peg-in-hole','peg_ee', 'peg_ee.xml')
         xml_path = os.path.abspath(file_path)
         peg_ee = mjcf.from_path(xml_path)
+        self._peg_end = peg_ee.find('body','peg_end')
 
         # attach EE to arm
         self._arm.attach_tool(peg_ee, pos=[0, 0, 0], quat=[0, 0, 0, 1])
+        # move eef_site to the peg tip
+        self._arm._eef_site = self._arm._mjcf_root.find('site','peg_ee/peg_end_site')
 
          # attach arm to arena
         self._arena.attach(
@@ -111,10 +114,9 @@ class UR3ePegInHoleEnv(gym.Env):
         torque = self._physics.data.sensor('ur3e/ee_torque').data
         # position of the hole w.r.t. peg (x and y coordinates)
         hole_pos = self._physics.bind(self._hole).xpos.copy()[:2]
-        peg_pos = self._physics.named.data.xpos['ur3e/peg_ee/peg_end'][:2]
+        peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()[:2]
         # NOTE: should I define peg_pos from the joints instead of directly from sim data?
-        hole_wrt_peg = hole_pos - peg_pos
-        # print("hole pos wrt peg = ",hole_wrt_peg)
+        hole_wrt_peg = hole_pos - peg_end_pos
         return np.concatenate((force,torque,hole_wrt_peg)) #NOTE: how about self.observation_space?
         # return np.zeros(6)
 
