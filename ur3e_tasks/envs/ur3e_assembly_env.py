@@ -10,6 +10,8 @@ from ur3e_tasks.arenas import AssemblyArena
 from ur3e_tasks.robots import Suction, RT2F85
 
 from ur3e_tasks.utils import  DomainRandomizer
+from ur3e_tasks.utils import  AssemblyBT
+
 from manipulator_mujoco.mocaps import Target
 from manipulator_mujoco.controllers import OperationalSpaceController
 from ur3e_tasks.robots import Camera
@@ -36,7 +38,7 @@ class UR3eAssemblyEnv(gym.Env):
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self._viewer = None
         self._render_mode = render_mode
-        self.show_cam = True
+        self.show_cam = False
         ############################
         # create MJCF model
         ############################
@@ -58,11 +60,10 @@ class UR3eAssemblyEnv(gym.Env):
             attachment_site_name='attachment_site'
         )
 
+
         
         # Get Hole position
         self._hole = self._arena.mjcf_model.find('site', "hole_site")
-        self._hole_joint = self._arena.mjcf_model.find('joint', "hole_joint")
-        self._hole_body = self._arena.mjcf_model.find('body', "hole")
         
 
         # # Get Peg position
@@ -79,6 +80,8 @@ class UR3eAssemblyEnv(gym.Env):
 
         # attach EE to arm
         self._arm.attach_tool(assembly_ee, pos=[0, 0, 0], quat=[0, 0, 0, 1])
+        # move eef_site to end effector tip
+        self._arm._eef_site = self._arm._mjcf_root.find("site","assembly_ee/tip_site")
         
 
         # attach arm to arena
@@ -145,15 +148,19 @@ class UR3eAssemblyEnv(gym.Env):
         self._randomizer.random_fixed_camera("fixed_camera","camera_center")
         self._randomizer.random_distractors()
         self._randomizer.random_texture_arm(self._arm)
-
+        
         # recomplie model
         self.complie_model()
+
+        # find initial arm position
+        init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
+        init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
+        self._target.set_mocap_pose(self._physics, position=init_pos, quaternion=init_quat)
+        target_pose = self._target.get_mocap_pose(self._physics)
+        
         # reset physics
         with self._physics.reset_context():
-            for i in range(10): # give a couple of time to finish reset (~500-2000 steps)
-                self.i = self.i +1
-                # put arm in a reasonable starting position
-                self._physics.bind(self._arm.joints).qpos = [
+            self._physics.bind(self._arm.joints).qpos = [
                     -1.5707,
                     -1.5707,
                     1.5707,
@@ -161,10 +168,18 @@ class UR3eAssemblyEnv(gym.Env):
                     -1.5707,
                     0.0,
                 ]
+            
+            for i in range(1000): # give a couple of time to move to initial position (~500-2000 steps)
+                self.i = self.i +1
+                # put arm in a reasonable starting position
                 
-                self._physics.step()
-                if self._render_mode == "human":
-                    self._render_frame()
+
+                # random initial position
+                self._controller.run(target_pose)
+
+            #     self._physics.step()
+                # if self._render_mode == "human":
+                #     self._render_frame()
           
 
         
@@ -178,27 +193,38 @@ class UR3eAssemblyEnv(gym.Env):
         self.i = self.i + 1
         terminated = False
 
-        # peg in hole testing logic
-        if self.i < 1000: # Move peg to a position on top of peg
-            hole_pos = self._physics.bind(self._hole).xpos.copy()
-            hole_pos[2] = hole_pos[2] + 0.1
-            self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
-        elif self.i < 2000: # assemble
-            hole_pos = self._physics.bind(self._hole).xpos.copy()
-            hole_pos[2] = hole_pos[2] + 0.002
-            self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
-        elif self.i < 2500: # rotate peg inside the hole
-            hole_pos = self._physics.bind(self._hole).xpos.copy()
-            hole_pos[2] = hole_pos[2] + 0.002
-            self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0.7071068, 0.7071068])
-        else:
-            terminated = True
+        # behavior
+        cmd, state, success, terminated = self._bt.run()
+        # print('-------------------------')
+        # print(f"Command: {cmd}")
+        # print(f"State: {state}")
+        # print(f"Success: {success}")
+        # print(f"Terminated: {terminated}")
+        # print('-------------------------')
 
-        # set target for ee
-        target_pose = self._target.get_mocap_pose(self._physics)
+        
+        # # peg in hole testing logic
+        # if self.i < 2500: # Move peg to a position on top of peg
+        #     hole_pos = self._physics.bind(self._hole).xpos.copy()
+        #     hole_pos[2] = hole_pos[2] + 0.1
+        #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
+        # elif self.i < 4000: # assemble
+        #     hole_pos = self._physics.bind(self._hole).xpos.copy()
+        #     hole_pos[2] = hole_pos[2] + 0.002
+        #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
+        # elif self.i < 5000: # rotate peg inside the hole
+        #     hole_pos = self._physics.bind(self._hole).xpos.copy()
+        #     hole_pos[2] = hole_pos[2] + 0.002
+        #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0.7071068, 0.7071068])
+        # else:
+        #     terminated = True
+        if cmd is not None:
+            self._target.set_mocap_pose(self._physics, position=cmd[:3], quaternion=cmd[3:])
+            # set target for ee
+            target_pose = self._target.get_mocap_pose(self._physics)
 
-        # run OSC controller to move to target pose
-        self._controller.run(target_pose)
+            # run OSC controller to move to target pose
+            self._controller.run(target_pose)
 
         # step physics
         self._physics.step()
@@ -242,7 +268,7 @@ class UR3eAssemblyEnv(gym.Env):
             self._viewer.cam.elevation = -45
             self._viewer.cam.lookat[:] = np.array([0.0, 0.0, 1.0])
             # start rendering camera
-            self._camera._renderer.render()
+            # self._camera._renderer.render()
             print("Start viewer")
             
 
@@ -258,7 +284,7 @@ class UR3eAssemblyEnv(gym.Env):
             if self.show_cam and self.i%20 == 0:
                 # print(self._camera.image)
                 cv2.imshow("fixed_camera",cv2.cvtColor(self._camera.image, cv2.COLOR_RGB2BGR) )
-                # cv2.imshow("hand_camera",cv2.cvtColor(self._hand_camera.image, cv2.COLOR_RGB2BGR) )
+                cv2.imshow("hand_camera",cv2.cvtColor(self._hand_camera.image, cv2.COLOR_RGB2BGR) )
                 cv2.waitKey(1)
                 # self._camera.shoot()
 
@@ -279,21 +305,17 @@ class UR3eAssemblyEnv(gym.Env):
         if self._viewer is not None:
             self._viewer.close()
             self._camera._renderer.close()
+            self._hand_camera._renderer.close()
 
     def complie_model(self):
         self.close()
-        # # Get Hole position
-        # self._hole = self._arena.mjcf_model.find('site', "hole_site")
-
-        # # Get Peg position
-        # self._peg_pickup = self._arena.mjcf_model.find('site', "peg_pickup")
-        # self._peg = self._arena.mjcf_model.find('site', "peg_base")
 
         # generate model
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
         # Camera 
         self._camera = Camera([480, 320], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera")
+        self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
         
         # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
@@ -310,6 +332,9 @@ class UR3eAssemblyEnv(gym.Env):
             vmax_xyz=1.0,
             vmax_abg=2.0,
         )
+
+        # set up behavior
+        self._bt = AssemblyBT(self._physics,self._arm.eef_site,self._hole)
 
         # for GUI and time keeping
         self._viewer = None

@@ -12,7 +12,7 @@ class DomainRandomizer:
         self.ws = self.create_ws(model)
         self.random_objs = []
 
-        self.max_distractors = 10
+        self.max_distractors = 15
         self.init_random_distractor(self.max_distractors
                                     )
         self.default_value = {}
@@ -26,12 +26,19 @@ class DomainRandomizer:
         """
         Random object inside workspace 
         """        
+        if object_name+"_body" not in self.default_value:
+            self.default_value[object_name+"_body"] = copy.deepcopy(self._model.find('body',object_name)._get_attribute("quat").copy())
         # random object position
         pos = self.get_random_ws_pos()
         # random object orientation
+        quat = self.default_value[object_name+"_body"].copy()
+        quat = self.random_quaternion_around_axis(quat, ['x'],np.pi/2,-np.pi/2 )
+        quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/4,0)
+        quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/8,-np.pi/8)
 
         # modify object postion in model
         self._model.find('body', object_name)._set_attribute("pos",pos)
+        self._model.find('body', object_name)._set_attribute("quat",quat)
 
     ############################################################
     ## 2. Random Object Color
@@ -196,7 +203,7 @@ class DomainRandomizer:
             self._model.find("geom","distractor_{}".format(i))._set_attribute("pos", pos)
 
         # random number of distractor
-        dis_num = np.random.randint(0,self.max_distractors)
+        dis_num = np.random.randint(7,self.max_distractors)
         print(dis_num)
         for i in range(dis_num):
             # random type
@@ -208,7 +215,7 @@ class DomainRandomizer:
             if geom_type == "sphere":
                 size = [np.random.uniform(0.04, 0.1)]  # Sphere has a single radius
             elif geom_type == "capsule":
-                size = [np.random.uniform(0.04, 0.1), np.random.uniform(0.1, 0.3)]  # Capsule: [radius, half-length]
+                size = [np.random.uniform(0.04, 0.1), np.random.uniform(0.04, 0.15)]  # Capsule: [radius, half-length]
             elif geom_type == "ellipsoid":
                 size = [
                     np.random.uniform(0.04, 0.1), 
@@ -217,7 +224,7 @@ class DomainRandomizer:
                 ]  # Ellipsoid: [radius_x, radius_y, radius_z]
 
             elif geom_type == "cylinder": 
-                size = [np.random.uniform(0.04, 0.1), np.random.uniform(0.1, 0.3)] # Cylinder: [radius, half-length]
+                size = [np.random.uniform(0.04, 0.1), np.random.uniform(0.04, 0.15)] # Cylinder: [radius, half-length]
             elif geom_type == "box":
                 size = [
                     np.random.uniform(0.04, 0.1), 
@@ -249,9 +256,6 @@ class DomainRandomizer:
             geom._set_attribute("quat", quat)
 
             
-                
-        
-
 
 
     #########################################
@@ -260,8 +264,8 @@ class DomainRandomizer:
     def create_ws(self, model):
         inner = model.find('geom','inner_workspace')._get_attribute("size")[0]       
         outer = model.find('geom','outer_workspace')._get_attribute("size")[0]  
-        min_angle = -np.pi/2
-        max_angle = np.pi/2
+        min_angle = (-np.pi/2)/2
+        max_angle = (np.pi/2)/2
         min_height = model.find('body','outer_workspace')._get_attribute("pos")[2] - model.find('geom','outer_workspace')._get_attribute("size")[1]
         max_height = model.find('body','outer_workspace')._get_attribute("pos")[2] + model.find('geom','outer_workspace')._get_attribute("size")[1]
         table_radius = model.find('geom','table_top')._get_attribute("size")[0]
@@ -300,26 +304,39 @@ class DomainRandomizer:
         pos = [x,y,z]
         return pos
     
+    def get_random_ws_pos_clearance(self, object_pos, clearance):    
+        default_pos = [0.2, 0.0, 1.1]
+        for i in range(1000):
+            ran_pos = self.get_random_ws_pos()
+            distance_to_object = np.linalg.norm(np.array(ran_pos) - np.array(object_pos))
+            if distance_to_object > clearance:
+                return ran_pos
+
+        return default_pos
+    
     def get_random_outside_ws_pos(self):    
         
         # Unpack workspace parameters
+        inner = self.ws["inner"]
         outer = self.ws["outer"]
         min_angle = self.ws["min_angle"]
         max_angle = self.ws["max_angle"]
         min_height = self.ws["min_height"]
         max_height = self.ws["max_height"]
         table_radius = self.ws["table_radius"]
-        
-        # Generate random radius between outer and table
-        r = np.random.uniform(outer+0.1, table_radius-0.1)
-        
+
         # Generate random angle outside min_angle and max_angle (converted to radians)
         if random.choice([True, False]):
             # Generate theta less than min_angle
-            theta = np.random.uniform(-np.pi, min_angle/1.5)
+            theta = np.random.uniform(-np.pi, min_angle/1.2)
         else:
             # Generate theta greater than max_angle
-            theta = np.random.uniform(max_angle/1.5, np.pi)
+            theta = np.random.uniform(max_angle/1.2, np.pi)
+       
+        # Generate random radius between outer and table
+        r = np.random.uniform(inner+0.1, table_radius-0.1)
+        
+        
         
         # Generate random height between min_height and max_height
         z = np.random.uniform(min_height, min_height+0.01)
@@ -331,6 +348,51 @@ class DomainRandomizer:
         pos = [x,y,z]
         return pos
     
+
+    def random_quaternion_around_axis(self,original_quat, axis=['x', 'y', 'z'], max_angle=np.pi/8,min_angle=-np.pi/8):
+        """
+        Generate a random quaternion around the original quaternion, applying the rotation to specified axes.
+
+        Parameters:
+        - original_quat: The original quaternion as a list or array of size 4 [w, x, y, z].
+        - axis: A list of axes to apply random rotation to. Should be a list containing 'x', 'y', 'z'.
+        - max_angle: The maximum random angle (in radians) to apply for rotation (default is pi/8 radians).
+
+        Returns:
+        - A new quaternion [w, x, y, z] with random rotation applied to the specified axes.
+        """
+        # # change the format of quat to [x, y, z, w]
+        # original_quat = [original_quat[1],original_quat[2],original_quat[3],original_quat[0]] 
+        # Axis mapping to unit vectors
+        axis_mapping = {
+            'x': np.array([1, 0, 0]),
+            'y': np.array([0, 1, 0]),
+            'z': np.array([0, 0, 1])
+        }
+        
+        # Initialize an identity quaternion
+        rotation_quat = R.from_quat([0, 0, 0, 1])  # Identity quaternion [x, y, z, w]
+        
+        # Loop through each specified axis
+        for ax in axis:
+            if ax in axis_mapping:
+                # Generate a small random angle around the original axis
+                angle = np.random.uniform(min_angle, max_angle)
+                
+                # Create a rotation quaternion for this axis
+                axis_vector = axis_mapping[ax]
+                axis_rotation = R.from_rotvec(angle * axis_vector)  # Rotation in axis-angle form
+                
+                # Multiply with the cumulative rotation quaternion
+                rotation_quat = axis_rotation * rotation_quat
+        
+        # Combine the original quaternion with the random rotation
+        original_rotation = R.from_quat(original_quat)  # Convert original quaternion to scipy rotation
+        new_rotation = rotation_quat * original_rotation  # Apply random rotation
+        new_rotation = new_rotation.as_quat()
+        # Return the new quaternion (in [x, y, z, w] format)
+        return new_rotation
+
     def get_random_light_pos(self, r_range, azimuth_range,polar_range):    
         
         """
