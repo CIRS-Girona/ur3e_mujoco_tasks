@@ -1,6 +1,7 @@
 import gymnasium
 import manipulator_mujoco
 from gymnasium.envs.registration import register
+import numpy as np
 
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
@@ -22,11 +23,11 @@ while True:
     i+=1
     # Choose a random action from the available action space
     action = env.action_space.sample()
+    # action = np.array([0.5,0.5,0.1,0.0,0.0])
+    print("action = ", action)
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
-    if i%100==0:
-        print(observation)
-    # print(action)
+    print("observation = ", observation)
     # Check if the episode is over (terminated) or max steps reached (truncated)
     if terminated or truncated:
         # If the episode ends or is truncated, reset the environment
