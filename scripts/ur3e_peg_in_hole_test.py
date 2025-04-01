@@ -27,7 +27,10 @@ while True:
     print("action = ", action)
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
-    print("observation = ", observation)
+    # print("observation = ", observation)
+    print("info =")
+    print(info)
+    print("reward = ", reward)
     # Check if the episode is over (terminated) or max steps reached (truncated)
     if terminated or truncated:
         # If the episode ends or is truncated, reset the environment

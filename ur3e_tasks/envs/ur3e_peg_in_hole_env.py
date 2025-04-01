@@ -25,23 +25,23 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def __init__(self, render_mode=None):
         # Define observation space
-        # observation_space = [Fx, Fy, Fz, Mx, My, Mz, dx, dy]
+        # observation_space = [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
         # force and torque limits taken from UR3e datasheet
-        obs_limit = np.array([30.0, 30.0, 30.0, 10.0, 10.0, 10.0, np.inf, np.inf])
+        self.obs_limit = np.array([30.0, 30.0, 30.0, 10.0, 10.0, 10.0, np.inf, np.inf, np.inf])
         self.observation_space = spaces.Box(
-            low=-obs_limit,
-            high=obs_limit,
-            shape=(8,), 
+            low=-self.obs_limit,
+            high=self.obs_limit,
+            shape=(9,), 
             dtype=np.float64
         )
 
         # Define action space
-        # action_space = [vx, vy, vz, wx, wy] defined in the end-effector frame
-        # act_limit = np.array([0.5, 0.5, 0.5, 0.1, 0.1])
-        act_limit = np.array([2.0, 2.0, 2.0, 1.0, 1.0])
+        # action_space = [vx, vy, vz, wx, wy] defined in the world frame
+        self.act_limit = np.array([0.5, 0.5, 0.5, 0.1, 0.1])
+        # self.act_limit = np.array([2.0, 2.0, 2.0, 1.0, 1.0])
         self.action_space = spaces.Box(
-            low=-act_limit, 
-            high=act_limit, 
+            low=-self.act_limit, 
+            high=self.act_limit, 
             shape=(5,), 
             dtype=np.float64
         )
@@ -118,14 +118,22 @@ class UR3ePegInHoleEnv(gym.Env):
         self._step_start = None
         self.i = 0
 
+        # more attributes related to rewards computation
+        # TODO: define more appropriate values
+        self.reward_weights = [1.0,1.0,1.0,1.0,1.0]
+        self.clearance = 0.03 # TODO: find out this value, or try to make it dynamically follow the mjcf model
+        self.z_threshold = 0.05 # must be very small to make sure the peg is inserted to the hole
+
+        self.max_timestep = 60
+
     def _get_obs(self) -> np.ndarray:
         # end-effector force-torque
         force = self._physics.data.sensor('ur3e/ee_force').data
         torque = self._physics.data.sensor('ur3e/ee_torque').data
-        # position of the hole w.r.t. peg (x and y coordinates)
-        peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()[:2]
+        # position of the hole w.r.t. peg
+        peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
         # NOTE: should I define peg_pos from the joints instead of directly from sim data?
-        hole_wrt_peg = self._hole_pos[:2] - peg_end_pos
+        hole_wrt_peg = self._hole_pos - peg_end_pos
         return np.concatenate((force,torque,hole_wrt_peg))
 
     def _get_info(self) -> dict:
@@ -227,17 +235,59 @@ class UR3ePegInHoleEnv(gym.Env):
 
         print("i = ", self.i)
 
-        if self.i == 60:
+        if self.i == self.max_timestep:
             truncated = True
         
-        # TODO come up with a reward, termination function that makes sense for your RL task
-        observation = self._get_obs()
-        reward = 0
-        # terminated = False
-        info = self._get_info()
+        # get observation
+        observation = self._get_obs() # return [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
 
-        # NOTE: termination function >> num of steps, force limit, task completed
+        ## Reward function
+        # reward based on distance
+        # TODO: refine the values for max_dist
+        max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
+        reward_dist = self.map_reward(observation[-3:],max_dist)
 
+        # reward based on magnitude of action taken
+        reward_act = self.map_reward(action,self.act_limit)
+
+        # reward based on contact force
+        reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
+
+        # reward (or penalty, actually) based on time step taken
+        reward_time = -0.1
+
+        # reward/penalty based on termination
+        # task completion is defined based on x-y distance (must be less than the clearance) 
+        # and z distance (must be less than a certain threshold)
+        task_completed = (np.linalg.norm(observation[-3:-1]) < self.clearance) and (np.abs(observation[-1]) < self.z_threshold)
+        # safety violation occurs if any of the detected forces and torques exceeds the limit
+        safety_violation = np.any(np.abs(observation[:6]) > self.obs_limit[:6])
+        # assign reward and flags
+        if task_completed:
+            reward_termination = 200
+            terminated = True
+        elif safety_violation:
+            reward_termination = -10
+            terminated = True
+        else:
+            reward_termination = 0
+
+        # compute total reward = weighted average
+        reward_list = [reward_dist,reward_act,reward_force,reward_time,reward_termination]
+        reward = np.dot(self.reward_weights,reward_list)
+
+        # info = self._get_info()
+        
+        info = {
+            "forces":observation[:3],
+            "torques":observation[3:6],
+            "distance_to_hole":observation[6:],
+            "reward_dist": reward_dist,
+            "reward_act": reward_act,
+            "reward_force": reward_force,
+            "reward_time": reward_time,
+            "reward_termination": reward_termination
+        }
 
         return observation, reward, terminated, truncated, info
 
@@ -301,3 +351,19 @@ class UR3ePegInHoleEnv(gym.Env):
         """
         if self._viewer is not None:
             self._viewer.close()
+
+    ############################
+    # HELPER FUNCTIONS
+    ############################
+
+    def map_reward(self,obs,max):
+        '''
+            Linearly map observation to its reward in the range of [1,0] based on max value.
+            Arguments:
+                obs: observation to be mapped
+                max: max value for the observation (represents the observation that will receive zero reward)
+            Returns:
+                reward in the range of [1,0]
+        '''
+        reward = 1 - np.linalg.norm(obs/max)
+        return np.clip(reward,0,1)
