@@ -14,8 +14,13 @@ from ur3e_tasks.utils import  AssemblyBT
 
 from manipulator_mujoco.mocaps import Target
 from manipulator_mujoco.controllers import OperationalSpaceController
+from ur3e_tasks.controllers import EEFVelocityController
 from ur3e_tasks.robots import Camera
 import cv2
+from PIL import Image
+from manipulator_mujoco.utils.transform_utils import (
+    mat2quat,
+)
 
 class UR3eAssemblyEnv(gym.Env):
 
@@ -39,6 +44,8 @@ class UR3eAssemblyEnv(gym.Env):
         self._viewer = None
         self._render_mode = render_mode
         self.show_cam = False
+        self.random_once = False
+        self.random_domain = True
         ############################
         # create MJCF model
         ############################
@@ -48,6 +55,7 @@ class UR3eAssemblyEnv(gym.Env):
 
         # mocap target that OSC will try to follow
         self._target = Target(self._arena.mjcf_model)
+        
 
 
         ### ur3e arm
@@ -89,8 +97,20 @@ class UR3eAssemblyEnv(gym.Env):
             self._arm.mjcf_model, pos=[0,0,1], quat=[0.7071068, 0, 0, -0.7071068]
         )
 
+        # mocap target for viuslizing ee pose
+        self._ee_pose = self._arena.mjcf_model.worldbody.add("body", name="ee_pose", mocap=True)
+        self._ee_pose.add(
+            "geom",
+            type="box",
+            size=[0.03, 0.015 ,0.015],
+            rgba=[1, 0, 0, 0.2],
+            conaffinity=0,
+            contype=0,
+            group=1
+        )
 
-        self._randomizer = DomainRandomizer(self._arena._mjcf_model)
+
+        self._randomizer = DomainRandomizer(self._arena._mjcf_model,seed=1000)
 
         # self._weld = self._gripper.setup_weld(self._arena.mjcf_model,"peg" )
         # self.complie_model()
@@ -99,7 +119,7 @@ class UR3eAssemblyEnv(gym.Env):
         # self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
         # # Camera 
-        # self._camera = Camera([480, 320], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera")
+        # self._camera1 = Camera([480, 320], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera")
         # # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
         # # set up OSC controller
@@ -123,31 +143,81 @@ class UR3eAssemblyEnv(gym.Env):
         # self.i = 0
 
     def _get_obs(self) -> np.ndarray:
-        # TODO come up with an observations that makes sense for your RL task
-        return np.zeros(6)
+        """
+        - {"frame1": np.array
+        frame2": np.array
+        frame3": np.array
+        ee_pose: np.array
+        joints: np.array
+        }
+        """
+        if self.i % 10 == 0:
+            # prepare data
+            # get ee pose respect to base
+            base = self._arena.mjcf_model.find('body', "ur3e/base")
+            ee_pose = self.pose_in_base(self._arm.eef_site, base) # [x,y,z,qx,qy,qz,qw]
+            
+            # get joints 
+            joints = np.array(self._physics.bind(self._arm.joints).qpos)
+            # # # get images
+            img1 = self._camera1.image # [H W C]
+            img2 = self._camera2.image
+            img3 = self._hand_camera.image
+
+
+            # # construc the dict 
+            self._obs = {"frame1": img1,
+            "frame2": img2,
+            "frame3": img3,
+            "ee_pose": ee_pose.reshape(7,1),
+            "joints": joints.reshape(6,1),
+            }     
+
+        return self._obs
 
     def _get_info(self) -> dict:
-        # TODO come up with an info dict that makes sense for your RL task
-        return {}
+        """
+        - {"hole_pose": np.array
+        "step": int}
+        """
+        # get hole pose respect to base
+        base = self._arena.mjcf_model.find('body', "ur3e/base")
+        hole = self._arena.mjcf_model.find('body', "hole")
+        hole_pose = self.pose_in_base(hole, base)
+
+        dict = {"hole_pose":hole_pose.reshape(7,1),
+                "step":self.i,
+        }   
+
+
+        return dict
 
     def reset(self, seed=None, options=None) -> tuple:
         super().reset(seed=seed)
         # reset flags
         self.i = 0
         # domain randomize
-        self._randomizer.random_object_in_ws("hole")
-        self._randomizer.random_texture("table_top")
-        self._randomizer.random_texture("wall_left")
-        self._randomizer.random_texture("wall_right")
-        self._randomizer.random_texture("wall_back")
-        self._randomizer.random_light("light_source")
-        self._randomizer.random_object_color("hole")
-        self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
-        self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
-        self._randomizer.random_arm_height("ur3e/base")
-        self._randomizer.random_fixed_camera("fixed_camera","camera_center")
-        self._randomizer.random_distractors()
-        self._randomizer.random_texture_arm(self._arm)
+        if self.random_domain:
+            self._randomizer.random_object_in_ws("hole")
+            self._randomizer.random_texture("table_top")
+            self._randomizer.random_texture("wall_left")
+            self._randomizer.random_texture("wall_right")
+            self._randomizer.random_texture("wall_back")
+            self._randomizer.random_light("light_source")
+            self._randomizer.random_object_color("hole")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+            self._randomizer.random_arm_height("ur3e/base")
+            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+            self._randomizer.random_distractors()
+            self._randomizer.random_texture_arm(self._arm)
+            self._random_state = self._randomizer.get_random_state()
+            if self.random_once == True:
+                self.random_domain = False
+        else: 
+            
+            self._randomizer.apply_random_state(self._random_state )
         
         # recomplie model
         self.complie_model()
@@ -170,14 +240,14 @@ class UR3eAssemblyEnv(gym.Env):
                 ]
             
             for i in range(1000): # give a couple of time to move to initial position (~500-2000 steps)
-                self.i = self.i +1
                 # put arm in a reasonable starting position
                 
 
                 # random initial position
-                self._controller.run(target_pose)
+                vel_cmd = self._controller.cal_vel_from_target(target_pose)
+                self._controller.run(vel_cmd)
 
-            #     self._physics.step()
+                self._physics.step()
                 # if self._render_mode == "human":
                 #     self._render_frame()
           
@@ -192,9 +262,11 @@ class UR3eAssemblyEnv(gym.Env):
         # flags
         self.i = self.i + 1
         terminated = False
+        # action = [0.267633,  0., -0., -0., -0., -0.]
+        print(action)
 
         # behavior
-        cmd, state, success, terminated = self._bt.run()
+        # cmd, state, success, terminated = self._bt.run()
         # print('-------------------------')
         # print(f"Command: {cmd}")
         # print(f"State: {state}")
@@ -218,13 +290,8 @@ class UR3eAssemblyEnv(gym.Env):
         #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0.7071068, 0.7071068])
         # else:
         #     terminated = True
-        if cmd is not None:
-            self._target.set_mocap_pose(self._physics, position=cmd[:3], quaternion=cmd[3:])
-            # set target for ee
-            target_pose = self._target.get_mocap_pose(self._physics)
-
-            # run OSC controller to move to target pose
-            self._controller.run(target_pose)
+    
+        self._controller.run(action)
 
         # step physics
         self._physics.step()
@@ -237,11 +304,27 @@ class UR3eAssemblyEnv(gym.Env):
         # TODO come up with a reward, termination function that makes sense for your RL task
         observation = self._get_obs()
         reward = 0
-        # terminated = False
+        terminated = self._bt.terminate
+            
         info = self._get_info()
 
 
         return observation, reward, terminated, False, info
+    
+    def get_action_bt(self):
+        cmd, state, success, terminated = self._bt.run()
+
+        
+        vel_cmd = np.zeros(6)
+        if cmd is not None:
+            self._target.set_mocap_pose(self._physics, position=cmd[0][:3], quaternion=cmd[0][3:])
+            # set target for ee
+            target_pose = self._target.get_mocap_pose(self._physics)
+
+            # run vel controller to move to target pose
+            vel_cmd = self._controller.cal_vel_from_target(target_pose,cmd[1],cmd[2])
+
+        return vel_cmd,  state, success, terminated
 
     def render(self) -> np.ndarray:
         """
@@ -268,7 +351,7 @@ class UR3eAssemblyEnv(gym.Env):
             self._viewer.cam.elevation = -45
             self._viewer.cam.lookat[:] = np.array([0.0, 0.0, 1.0])
             # start rendering camera
-            # self._camera._renderer.render()
+            # self._camera1._renderer.render()
             print("Start viewer")
             
 
@@ -282,12 +365,25 @@ class UR3eAssemblyEnv(gym.Env):
             self._viewer.sync()
             # render camera
             if self.show_cam and self.i%20 == 0:
-                # print(self._camera.image)
-                cv2.imshow("fixed_camera",cv2.cvtColor(self._camera.image, cv2.COLOR_RGB2BGR) )
-                cv2.imshow("hand_camera",cv2.cvtColor(self._hand_camera.image, cv2.COLOR_RGB2BGR) )
-                cv2.waitKey(1)
-                # self._camera.shoot()
+                # Convert images to BGR format
+                fixed_camera1_img = cv2.cvtColor(self._camera1.image, cv2.COLOR_RGB2BGR)
+                fixed_camera2_img = cv2.cvtColor(self._camera2.image, cv2.COLOR_RGB2BGR)
+                hand_camera_img = cv2.cvtColor(self._hand_camera.image, cv2.COLOR_RGB2BGR)
 
+                # Resize images to the same size if necessary
+                height = min(fixed_camera1_img.shape[0], fixed_camera2_img.shape[0], hand_camera_img.shape[0])
+                width = min(fixed_camera1_img.shape[1], fixed_camera2_img.shape[1], hand_camera_img.shape[1])
+
+                fixed_camera1_img = cv2.resize(fixed_camera1_img, (width, height))
+                fixed_camera2_img = cv2.resize(fixed_camera2_img, (width, height))
+                hand_camera_img = cv2.resize(hand_camera_img, (width, height))
+
+                # Concatenate images horizontally (side by side)
+                combined_image = cv2.hconcat([fixed_camera1_img, fixed_camera2_img, hand_camera_img])
+
+                # Display all images in one window
+                cv2.imshow("All Cameras", combined_image)
+                cv2.waitKey(1)
             # TODO come up with a better frame rate keeping strategy
             time_until_next_step = self._timestep - (time.time() - self._step_start)
             if time_until_next_step > 0:
@@ -304,7 +400,8 @@ class UR3eAssemblyEnv(gym.Env):
         """
         if self._viewer is not None:
             self._viewer.close()
-            self._camera._renderer.close()
+            self._camera1._renderer.close()
+            self._camera2._renderer.close()
             self._hand_camera._renderer.close()
 
     def complie_model(self):
@@ -314,13 +411,14 @@ class UR3eAssemblyEnv(gym.Env):
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
         # Camera 
-        self._camera = Camera([480, 320], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera")
-        self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
+        self._camera1 = Camera([240, 180], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera1")
+        self._camera2 = Camera([240, 180], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera2")
+        self._hand_camera = Camera([240,180],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
         
         # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
         # set up OSC controller
-        self._controller = OperationalSpaceController(
+        self._controller = EEFVelocityController(
             physics=self._physics,
             joints=self._arm.joints,
             eef_site=self._arm.eef_site,
@@ -342,3 +440,83 @@ class UR3eAssemblyEnv(gym.Env):
         self._step_start = None
         self.i = 0
         print("Finish Compiling")
+
+    ###############################################################
+    #### Utils Functions 
+    ###############################################################
+
+    def pose_in_base(self,target,base):
+        """
+        find target pose respect to the base 
+        """
+
+        # extract pose form input 
+        target_pos = self._physics.bind(target).xpos
+        target_rot = self._physics.bind(target).xmat.reshape(3, 3)
+
+        base_pos = self._physics.bind(base).xpos
+        base_rot = self._physics.bind(base).xmat.reshape(3, 3)
+
+
+
+        # calculate position
+        target_pos_base = base_rot.T @ (target_pos - base_pos)
+
+        # calculate rotation
+        target_rot_base = base_rot.T @ target_rot
+
+        # change to [x,y,z,qx,qy,qz,qw] format 
+        target_quat_base = mat2quat(target_rot_base)
+        target_pose = np.concatenate([target_pos_base, target_quat_base])
+
+        # # test
+        # position = base_rot @ target_pos_base + base_pos
+        # mat = base_rot @ target_rot_base
+        # quat = mat2quat(mat)
+        # pose = np.concatenate([position,quat])
+        # print("EE pos2: {}".format(pose))
+
+        return target_pose
+    
+    def prepare_image(self, img):
+        """
+        Resize the image to render resolution, then crop it around the center to the desired size.
+
+        Args:
+            img (np.array): Input image (H, W, C)
+
+        Returns:
+            np.array: Processed image
+        """
+
+        # Define target resolutions
+        render_resolution = (1280, 720)  # Resize to this first
+        crop_size = (448, 252) # Final desired size
+
+        # Step 1: Resize to render resolution
+        img_resized = self.resize(img, render_resolution)
+
+        # Step 2: Crop around the center
+        h, w, _ = img_resized.shape
+        crop_w, crop_h = crop_size
+
+        # Compute center
+        center_x, center_y = w // 2, h // 2
+
+        # Compute cropping box
+        x1, y1 = center_x - crop_w // 2, center_y - crop_h // 2
+        x2, y2 = center_x + crop_w // 2, center_y + crop_h // 2
+
+        # Crop the image
+        img_cropped = img_resized[y1:y2, x1:x2]
+
+        return img_cropped
+    
+    def resize(self,im, size, im_type="rgb"):
+        w, h = size
+        pil_im = Image.fromarray(im)
+        
+        pil_im = pil_im.resize((w, h), Image.BILINEAR)
+        
+        im = np.asarray(pil_im)
+        return im

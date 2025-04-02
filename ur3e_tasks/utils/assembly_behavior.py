@@ -162,15 +162,18 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
+        self.vel_lim = 1
+        self.ang_vel_lim = 10
+
         self.offset = 0.1
-        self.max_counter = 2000/self.blackboard.update_period
+        self.max_counter = 4000/self.blackboard.update_period
 
     def setup(self):
         self.logger.debug("  %s [MoveToHole::setup()]" % self.name)
 
     def initialise(self):
         self.logger.debug("  %s [MoveToHole::initialise()]" % self.name)
-        self.blackboard.state = self.name
+        self.blackboard.state = 0
         self.counter = 0
         hole_pos = self.physics.bind(self.hole).xpos.copy()
         hole_quat = mat2quat(self.physics.bind(self.hole).xmat.reshape(3, 3))
@@ -195,7 +198,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
             self.logger.debug("MoveToHole SUCCESS!!!")
             return py_trees.common.Status.SUCCESS
         else:
-            self.blackboard.command = self.hole_pose
+            self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
@@ -220,15 +223,18 @@ class Assemble(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
+        self.vel_lim = 0.05
+        self.ang_vel_lim = 0.2
+
         self.offset = 0.0
-        self.max_counter = 2000/self.blackboard.update_period
+        self.max_counter = 4000/self.blackboard.update_period
 
     def setup(self):
         self.logger.debug("  %s [Assemble::setup()]" % self.name)
 
     def initialise(self):
         self.logger.debug("  %s [Assemble::initialise()]" % self.name)
-        self.blackboard.state = self.name
+        self.blackboard.state = 1
         self.counter = 0
         hole_pos = self.physics.bind(self.hole).xpos.copy()
         hole_pos[2] = hole_pos[2] + self.offset
@@ -252,7 +258,7 @@ class Assemble(py_trees.behaviour.Behaviour):
             self.logger.debug("Assemble SUCCESS!!!")
             return py_trees.common.Status.SUCCESS
         else:
-            self.blackboard.command = self.hole_pose
+            self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
@@ -277,15 +283,18 @@ class Rotate(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
+        self.vel_lim = 0.2
+        self.ang_vel_lim = 1.0
+
         self.offset = 0.0
-        self.max_counter = 2000/self.blackboard.update_period
+        self.max_counter = 4000/self.blackboard.update_period
 
     def setup(self):
         self.logger.debug("  %s [Rotate::setup()]" % self.name)
 
     def initialise(self):
         self.logger.debug("  %s [Rotate::initialise()]" % self.name)
-        self.blackboard.state = self.name
+        self.blackboard.state = 2
         self.counter = 0
 
         eef_pos = self.physics.bind(self.eef).xpos.copy()
@@ -314,7 +323,7 @@ class Rotate(py_trees.behaviour.Behaviour):
             self.blackboard.terminate = True
             return py_trees.common.Status.SUCCESS
         else:
-            self.blackboard.command = self.rotated_pose
+            self.blackboard.command = [self.rotated_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
@@ -353,9 +362,13 @@ class AssemblyBT:
     
     def run(self):
         self.counter += 1
+        self.command = self.bt.children[0].blackboard.command
+        self.state = self.bt.children[0].blackboard.state
+        self.success = self.bt.children[0].blackboard.success
+        self.terminate = self.bt.children[0].blackboard.terminate
         if self.counter % self.update_period == 0: 
             self.bt.tick_once()
-        return self.bt.children[0].blackboard.command, self.bt.children[0].blackboard.state, self.bt.children[0].blackboard.success, self.bt.children[0].blackboard.terminate # 
+        return self.command, self.state, self.success, self.terminate # 
 
     def reset(self):
         pass

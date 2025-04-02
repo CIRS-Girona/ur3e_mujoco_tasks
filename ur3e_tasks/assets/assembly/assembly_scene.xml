@@ -52,18 +52,23 @@
     </body>
     
     <!-- workspace defined with two cylinder: outer - inner -->
-    <body name="outer_workspace" pos="0.0 0.0 1.1" euler="0  0.0  0">
-        <geom name="outer_workspace"  type="cylinder" size="0.53 0.01" rgba="0 1 0 0.2" conaffinity="0" contype="0" group="4"/>
+    <body name="outer_workspace" pos="0.0 0.0 1.075" euler="0  0.0  0">
+        <geom name="outer_workspace"  type="cylinder" size="0.53 0.001" rgba="0 1 0 0.15" conaffinity="0" contype="0" group="4"/>
     </body>
     <body name="inner_workspace" pos="0.0 0.0 1.0" euler="0  0.0  0">
-        <geom name="inner_workspace" type="cylinder" size="0.27 0.001" rgba="1 0 0 0.2" conaffinity="0" contype="0" group="4"/>
+        <geom name="inner_workspace" type="cylinder" size="0.27 0.001" rgba="1 0 0 0.15" conaffinity="0" contype="0" group="4"/>
     </body>
     
     <body name="workspace_center" euler="0  0.0  0" pos="0.0 0.0 1.0"></body>
-    <body name="camera_center" euler="0  0.0  0" pos="0.0 0.0 1.0"></body>
+    <body name="camera_center1" euler="0  0.0  0" pos="0.4 0.0 1.0"></body>
+    <body name="camera_center2" euler="0  0.0  0" pos="0.3 0.0 1.0"></body>
 
-    <body name="fixed_camera" euler="0  0  0" pos="0.7 0.25 1.7">
-      <camera name="fixed_camera"  mode="targetbody" target="camera_center" fovy="42.5" />
+    <body name="fixed_camera1" euler="0  0  0" pos="0.2 0.0 2.0">
+      <camera name="fixed_camera1"  mode="targetbody" target="camera_center1" fovy="42.5" />
+    </body>
+
+    <body name="fixed_camera2" euler="0  0  0" pos="0.3 1.0 1.4">
+      <camera name="fixed_camera2"  mode="targetbody" target="camera_center2" fovy="42.5" />
     </body>
 
     <light name="light_source" pos="1 1 2" mode="targetbody" target="workspace_center"/>

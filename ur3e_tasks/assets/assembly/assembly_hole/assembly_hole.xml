@@ -5,6 +5,10 @@
   <asset>
     <texture type="2d" name="hole" builtin="flat" rgb1="0.8 0.2 0.2" width="300" height="300"/>
     <material name="hole" texture="hole"/>
+
+     <texture type="2d" name="hole_box" builtin="flat" rgb1="0.9 0.9 0.9" width="300" height="300"/>
+    <material name="hole_box" texture="hole_box"/>
+    
     
   </asset>
 
@@ -25,6 +29,25 @@
         <geom name="right_geom" type="box" size="0.01 0.06 0.005" material="hole"/>
       </body>
         <site name="hole_site" pos="0 0 -0.03" size="0.01" rgba="0.5 0.0 0.0 0.3" group="5"/>
+
+
+      <body name="down_box" pos="-0.00 -0.06 -0.0375" quat="1 0 0 0">
+        <geom name="down_box_geom" type="box" size="0.055 0.002  0.035" material="hole_box"/>
+      </body>
+      <body name="left_box" pos="-0.055 0 -0.0375" quat="1 0 0 0">
+        <geom name="left_box_geom" type="box" size="0.002 0.06 0.035" material="hole_box"/>
+      </body>
+      <body name="top_box" pos="0.0 0.06 -0.0375" quat="1 0 0 0">
+        <geom name="top_box_geom" type="box" size="0.055 0.002 0.035" material="hole_box"/>
+      </body>
+      <body name="right_box" pos="0.055 0 -0.0375" quat="1 0 0 0">
+        <geom name="right_box_geom" type="box" size="0.002 0.06 0.035" material="hole_box"/>
+      </body>
+      <body name="bottom_box" pos="0.0 0 -0.07" quat="1 0 0 0">
+        <geom name="bottom_box_geom" type="box" size="0.055 0.06 0.002" material="hole_box"/>
+      </body>
+
+
     </body>
     
   </worldbody>

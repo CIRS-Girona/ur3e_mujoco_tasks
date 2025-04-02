@@ -6,16 +6,30 @@ import copy
 from scipy.spatial.transform import Rotation as R
 
 class DomainRandomizer:
-    def __init__(self, model, texture_dir = "/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images", random_objs=["table_top"]):
+    def __init__(self, model, texture_dir = "/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images",seed=None):
+        if seed:
+            np.random.seed(seed)
         self._model = model
-        self.texture_dir = texture_dir
         self.ws = self.create_ws(model)
+        self.texture_list = self.create_texture_list(texture_dir)
         self.random_objs = []
 
         self.max_distractors = 15
         self.init_random_distractor(self.max_distractors
                                     )
         self.default_value = {}
+
+        # for reproducing
+        self.random_state = {
+            "object_in_ws": {},
+            "object_color": {},
+            "texture": {},
+            "arm_texture": {},
+            "light": {},
+            "height": {},
+            "camera": {},
+            "distractor": {}
+        }
         
 
 
@@ -33,9 +47,17 @@ class DomainRandomizer:
         # random object orientation
         quat = self.default_value[object_name+"_body"].copy()
         quat = self.random_quaternion_around_axis(quat, ['x'],np.pi/2,-np.pi/2 )
-        quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/4,0)
-        quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/8,-np.pi/8)
+        quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/18,0)
+        quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/18,-np.pi/18)
 
+        self.apply_object_in_ws(object_name,pos,quat)
+
+        # save the radomed value
+        self.random_state["object_in_ws"][object_name] = [pos,quat]
+        
+
+
+    def apply_object_in_ws(self, object_name,pos,quat):
         # modify object postion in model
         self._model.find('body', object_name)._set_attribute("pos",pos)
         self._model.find('body', object_name)._set_attribute("quat",quat)
@@ -57,7 +79,13 @@ class DomainRandomizer:
         # random rgba value around original color
         rgb = self.random_rgb(rgb,0.02)
         
-        # modify object color in model
+        self.apply_object_color(material_name,rgb)
+
+        # save the radomed value        
+        self.random_state["object_color"][material_name] = [rgb]
+
+    def apply_object_color(self, material_name,rgb):
+         # modify object color in model
         self._model.find('texture', material_name)._set_attribute("rgb1",rgb)
 
 
@@ -76,15 +104,12 @@ class DomainRandomizer:
             self.random_objs.append(geom_name)
 
         # random texture
-        texture_file = self.get_random_png(self.texture_dir)
+        texture_file = self.get_random_png()
         
-        # modify materials
-        root.find('texture', "random_{}".format(geom_name))._set_attribute("file",texture_file)
-
-        # set material to corresponding random asset
+        self.apply_texture(geom_name,texture_file,root)
         
-        root.find('geom', geom_name)._set_attribute("material", "random_{}".format(geom_name))
-        
+        # save the radomed value        
+        self.random_state["texture"][geom_name] = [texture_file,root]
         
 
     def random_texture_arm(self, arm):
@@ -102,7 +127,14 @@ class DomainRandomizer:
                     self.random_objs.append(geom_name)
 
                 self.random_texture(geom_name, arm._mjcf_root)
-                              
+    
+    def apply_texture(self, geom_name,texture_file,root):
+         # modify materials
+        root.find('texture', "random_{}".format(geom_name))._set_attribute("file",texture_file)
+
+        # set material to corresponding random asset
+        
+        root.find('geom', geom_name)._set_attribute("material", "random_{}".format(geom_name))
 
         
 
@@ -124,7 +156,13 @@ class DomainRandomizer:
         offset3 = float(np.random.uniform(-0.1,0.1))
         light_ambient = np.array([0.3,0.3,0.3]) + np.array([offset1,offset2,offset3])
 
-        # modify light
+        self.apply_light(light_name,light_pos,light_ambient)
+
+        # save the radomed value        
+        self.random_state["light"][light_name] = [light_pos,light_ambient]
+
+    def apply_light(self, light_name,light_pos,light_ambient):
+         # modify light
         self._model.find('light', light_name)._set_attribute("pos",light_pos)
         self._model.find('light', light_name)._set_attribute("ambient",list(light_ambient))
 
@@ -145,6 +183,13 @@ class DomainRandomizer:
         ran = np.random.uniform(0,0.02)
         pos[2] = pos[2] + ran
 
+        self.apply_height( arm_body,pos)
+
+        # save the radomed value        
+        self.random_state["height"][arm_body] = [pos]
+
+        
+    def apply_height(self, arm_body,pos):
         # modify object postion in model
         self._model.find('body', arm_body)._set_attribute("pos",pos)
 
@@ -183,6 +228,12 @@ class DomainRandomizer:
         cam_fov =  self.default_value[camera_name+"_fov"]
         cam_fov = cam_fov + np.random.uniform(-2,2)
 
+        self.apply_camera(camera_name,cam_pos,center_name,center_pos,cam_fov)
+
+        # save the radomed value        
+        self.random_state["camera"][camera_name] = [cam_pos,center_name,center_pos,cam_fov]
+
+    def apply_camera(self,camera_name,cam_pos,center_name,center_pos,cam_fov):
         # modify camera
         self._model.find('body', center_name)._set_attribute("pos",center_pos)
         self._model.find('body', camera_name)._set_attribute("pos",cam_pos)
@@ -238,8 +289,9 @@ class DomainRandomizer:
             # random position 
             pos = self.get_random_outside_ws_pos()
             while self.is_obj_collide(pos,pos_list,0.2):
-                    print("Random Distractor Posiiton!!!")
-                    pos = self.get_random_outside_ws_pos()
+                print("Random Distractor Posiiton!!!")
+                pos = self.get_random_outside_ws_pos()
+            print("Finish Random Distractor Posiiton!!!")
             pos_list.append(pos)
 
             # random orientation
@@ -247,6 +299,12 @@ class DomainRandomizer:
             quat = R.from_euler('z', random_yaw).as_quat()
             quat = [quat[3], quat[0], quat[1], quat[2]]
 
+            # save the radomed value        
+            self.random_state["distractor"]["{}".format(i)] = [geom_type,rgb,size,pos,quat]
+
+            self.apply_distractor(i,geom_type,rgb,size,pos,quat)
+
+    def apply_distractor(self,i,geom_type,rgb,size,pos,quat):
             # modify geom
             geom = self._model.find("geom","distractor_{}".format(i))
             geom._set_attribute("type", geom_type)
@@ -256,6 +314,15 @@ class DomainRandomizer:
             geom._set_attribute("quat", quat)
 
             
+    ##########################################
+    ### Predefined random state
+    ##########################################
+    def apply_random_state(self,random_state):
+        for fcn_name, states in random_state.items():
+            random_fcn = getattr(self, f"apply_{fcn_name}", None)
+            for object_name,values in states.items():
+                random_fcn(object_name,*values)
+
 
 
     #########################################
@@ -416,25 +483,29 @@ class DomainRandomizer:
     
         return [x, y, z]
         
-    def get_random_png(self,directory):
-        png_files = []
+    def get_random_png(self):
+        
+        
+        # Choose a random file from the list
+        random_png = random.choice(self.texture_list)
+        
+        return random_png
+    
+    def create_texture_list(sefl,directory):
+        texture_list = []
         
         # Walk through the directory and subdirectories
         for root, dirs, files in os.walk(directory):
             for file in files:
                 if file.lower().endswith(".png"):
                     # Append the full path of the .png file to the list
-                    png_files.append(os.path.join(root, file))
+                    texture_list.append(os.path.join(root, file))
         
         # Check if there are any .png files
-        if not png_files:
+        if not texture_list:
             return "No PNG files found."
         
-        # Choose a random file from the list
-        random_png = random.choice(png_files)
-        
-        return random_png
-        
+        return texture_list
 
     def create_random_assets(self, object_list, root=None):
         """
@@ -449,7 +520,7 @@ class DomainRandomizer:
             "texture",
             name="random_{}".format(obj),
             type="2d",
-            file=self.get_random_png(self.texture_dir),
+            file=self.get_random_png(),
     
         )
         
@@ -529,5 +600,8 @@ class DomainRandomizer:
                 return True  # Collision detected
         
         return False  # No collision
+    
+    def get_random_state(self):
+        return self.random_state
         
             
