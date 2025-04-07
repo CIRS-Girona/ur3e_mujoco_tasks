@@ -49,6 +49,7 @@
         <geom name="wall_left" type="box" size="5 0.02 4" pos="0 -3 2" material="groundplane"/>
         <geom name="wall_back" type="box" size="0.02 5 4" pos="-3 0 2" material="groundplane"/>
         <geom name="wall_right" type="box" size="5 0.02 4" pos="0 3 2" material="groundplane"/>
+        <geom name="wall_front" type="box" size="0.02 5 4" pos="3 0 2" material="groundplane"/>
     </body>
     
     <!-- workspace defined with two cylinder: outer - inner -->
