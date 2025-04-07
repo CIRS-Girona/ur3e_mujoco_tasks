@@ -103,7 +103,7 @@ class EEFVelocityController(JointEffortController):
         ee_pos = self._physics.bind(self._eef_site).xpos
         ee_quat = mat2quat(self._physics.bind(self._eef_site).xmat.reshape(3, 3))
         ee_pose = np.concatenate([ee_pos, ee_quat])
-        print("EE Pose1: {}".format(ee_pose))
+        # print("EE Pose1: {}".format(ee_pose))
 
         # Calculate the pose error (difference between the target and current pose).
         pose_err = pose_error(target_pose, ee_pose)

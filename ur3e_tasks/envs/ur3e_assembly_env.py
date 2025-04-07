@@ -110,7 +110,7 @@ class UR3eAssemblyEnv(gym.Env):
         )
 
 
-        self._randomizer = DomainRandomizer(self._arena._mjcf_model,seed=1000)
+        self._randomizer = DomainRandomizer(self._arena._mjcf_model, self._arm)
 
         # self._weld = self._gripper.setup_weld(self._arena.mjcf_model,"peg" )
         # self.complie_model()
@@ -151,7 +151,7 @@ class UR3eAssemblyEnv(gym.Env):
         joints: np.array
         }
         """
-        if self.i % 10 == 0:
+        if self.i % 100 == 0:
             # prepare data
             # get ee pose respect to base
             base = self._arena.mjcf_model.find('body', "ur3e/base")
@@ -160,11 +160,11 @@ class UR3eAssemblyEnv(gym.Env):
             # get joints 
             joints = np.array(self._physics.bind(self._arm.joints).qpos)
             # # # get images
-            img1 = self._camera1.image # [H W C]
-            img2 = self._camera2.image
-            img3 = self._hand_camera.image
+            img1 = self.prepare_image(self._camera1.image) # [H W C]
+            img2 = self.prepare_image(self._camera2.image)
+            img3 = self.prepare_image(self._hand_camera.image)
 
-
+            
             # # construc the dict 
             self._obs = {"frame1": img1,
             "frame2": img2,
@@ -178,15 +178,19 @@ class UR3eAssemblyEnv(gym.Env):
     def _get_info(self) -> dict:
         """
         - {"hole_pose": np.array
-        "step": int}
+        "step": int
+        "success": int }
         """
         # get hole pose respect to base
         base = self._arena.mjcf_model.find('body', "ur3e/base")
         hole = self._arena.mjcf_model.find('body', "hole")
         hole_pose = self.pose_in_base(hole, base)
 
+        success = self._bt.success 
+
         dict = {"hole_pose":hole_pose.reshape(7,1),
                 "step":self.i,
+                "success":int(success)
         }   
 
 
@@ -198,7 +202,7 @@ class UR3eAssemblyEnv(gym.Env):
         self.i = 0
         # domain randomize
         if self.random_domain:
-            self._randomizer.random_object_in_ws("hole")
+            hole_pos = self._randomizer.random_object_in_ws("hole")
             self._randomizer.random_texture("table_top")
             self._randomizer.random_texture("wall_left")
             self._randomizer.random_texture("wall_right")
@@ -212,20 +216,41 @@ class UR3eAssemblyEnv(gym.Env):
             self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
             self._randomizer.random_distractors()
             self._randomizer.random_texture_arm(self._arm)
+            init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             self._random_state = self._randomizer.get_random_state()
+            
             if self.random_once == True:
                 self.random_domain = False
         else: 
+            # just to setup some variable
+            hole_pos = self._randomizer.random_object_in_ws("hole")
+            self._randomizer.random_texture("table_top")
+            self._randomizer.random_texture("wall_left")
+            self._randomizer.random_texture("wall_right")
+            self._randomizer.random_texture("wall_back")
+            self._randomizer.random_light("light_source")
+            self._randomizer.random_object_color("hole")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+            self._randomizer.random_arm_height("ur3e/base")
+            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+            self._randomizer.random_distractors()
+            self._randomizer.random_texture_arm(self._arm)
+            init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             
             self._randomizer.apply_random_state(self._random_state )
+            init_pose = self._random_state["initial_pose"]
         
         # recomplie model
         self.complie_model()
 
-        # find initial arm position
-        init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
-        init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
-        self._target.set_mocap_pose(self._physics, position=init_pos, quaternion=init_quat)
+        # # find initial arm position
+        # init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
+        # init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
+        print("Init Pose: {}".format(init_pose))
+        # time.sleep(50)
+        self._target.set_mocap_pose(self._physics, position=init_pose[:3], quaternion=init_pose[3:])
         target_pose = self._target.get_mocap_pose(self._physics)
         
         # reset physics
@@ -248,8 +273,8 @@ class UR3eAssemblyEnv(gym.Env):
                 self._controller.run(vel_cmd)
 
                 self._physics.step()
-                # if self._render_mode == "human":
-                #     self._render_frame()
+                if self._render_mode == "human":
+                    self._render_frame()
           
 
         
@@ -304,27 +329,14 @@ class UR3eAssemblyEnv(gym.Env):
         # TODO come up with a reward, termination function that makes sense for your RL task
         observation = self._get_obs()
         reward = 0
-        terminated = self._bt.terminate
+        terminated = self._bt.terminate 
             
         info = self._get_info()
 
 
         return observation, reward, terminated, False, info
     
-    def get_action_bt(self):
-        cmd, state, success, terminated = self._bt.run()
-
-        
-        vel_cmd = np.zeros(6)
-        if cmd is not None:
-            self._target.set_mocap_pose(self._physics, position=cmd[0][:3], quaternion=cmd[0][3:])
-            # set target for ee
-            target_pose = self._target.get_mocap_pose(self._physics)
-
-            # run vel controller to move to target pose
-            vel_cmd = self._controller.cal_vel_from_target(target_pose,cmd[1],cmd[2])
-
-        return vel_cmd,  state, success, terminated
+    
 
     def render(self) -> np.ndarray:
         """
@@ -411,9 +423,9 @@ class UR3eAssemblyEnv(gym.Env):
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
         # Camera 
-        self._camera1 = Camera([240, 180], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera1")
-        self._camera2 = Camera([240, 180], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera2")
-        self._hand_camera = Camera([240,180],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
+        self._camera1 = Camera([426, 240], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera1")
+        self._camera2 = Camera([426, 240], self._physics.model.ptr, self._physics.data.ptr, "fixed_camera2")
+        self._hand_camera = Camera([426, 240],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
         
         # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
@@ -441,9 +453,55 @@ class UR3eAssemblyEnv(gym.Env):
         self.i = 0
         print("Finish Compiling")
 
+    def set_replay(self, replay,random_state):
+        self.random_domain = False
+        
+        self._random_state = random_state
+
+        # setup repaly 
+        self._vel_replay = []
+        # fill up with 0 from 0 step to first recored step
+
+        for j in range(0,replay[0]["step"]):
+                self._vel_replay.append(np.zeros(6))
+        
+        for i in range(len(replay)-1):
+            
+            
+            for j in range(replay[i]["step"] ,replay[i+1]["step"]):
+                self._vel_replay.append(replay[i]["ee_vel"].reshape(6))
+            
+
+
+    ##########################################################
+    ### Actions
+    ##########################################################
+    def get_action_bt(self):
+        cmd, state, success, terminated = self._bt.run()
+
+        
+        vel_cmd = np.zeros(6)
+        if cmd is not None:
+            self._target.set_mocap_pose(self._physics, position=cmd[0][:3], quaternion=cmd[0][3:])
+            # set target for ee
+            target_pose = self._target.get_mocap_pose(self._physics)
+
+            # run vel controller to move to target pose
+            vel_cmd = self._controller.cal_vel_from_target(target_pose,cmd[1],cmd[2])
+
+        return vel_cmd,  state, success, terminated
+    
+    def get_action_replay(self):
+        if self.i > len(self._vel_replay)-1:
+            vel_cmd = np.zeros(6)
+        else:
+            vel_cmd = self._vel_replay[self.i]
+        return vel_cmd
+
     ###############################################################
     #### Utils Functions 
     ###############################################################
+
 
     def pose_in_base(self,target,base):
         """
@@ -490,8 +548,8 @@ class UR3eAssemblyEnv(gym.Env):
         """
 
         # Define target resolutions
-        render_resolution = (1280, 720)  # Resize to this first
-        crop_size = (448, 252) # Final desired size
+        render_resolution = (426, 240)  # Resize to this first
+        crop_size = (224,224) # Final desired size # ideally divided by 32
 
         # Step 1: Resize to render resolution
         img_resized = self.resize(img, render_resolution)

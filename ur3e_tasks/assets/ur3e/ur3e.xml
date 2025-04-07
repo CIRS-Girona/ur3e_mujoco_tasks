@@ -107,7 +107,7 @@
                 <geom mesh="wrist2_2" material="jointgray" class="visual"/>
                 <geom class="collision" size="0.032 0.045" pos="0 0 0.025"/>
                 <geom class="collision" pos="0 0.015 0.085" quat="1 1 0 0" size="0.032 0.035"/>
-                <body name="camera_link" pos="0.3 -0.0 0.1" euler="1.5708 1.0 1.5708">
+                <body name="camera_link" pos="0.25 -0.0 0.1" euler="1.5708 0.9 1.5708">
                     <camera name="hand_camera"  mode="fixed" fovy="42.5" />
                 </body>
                 <body name="wrist_3_link" pos="0 0 0.08535">

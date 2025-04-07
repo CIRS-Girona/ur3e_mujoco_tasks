@@ -6,10 +6,11 @@ import copy
 from scipy.spatial.transform import Rotation as R
 
 class DomainRandomizer:
-    def __init__(self, model, texture_dir = "/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images",seed=None):
+    def __init__(self, model,arm, texture_dir = "/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images",seed=None):
         if seed:
             np.random.seed(seed)
         self._model = model
+        self._arm_model = arm._mjcf_root
         self.ws = self.create_ws(model)
         self.texture_list = self.create_texture_list(texture_dir)
         self.random_objs = []
@@ -23,12 +24,12 @@ class DomainRandomizer:
         self.random_state = {
             "object_in_ws": {},
             "object_color": {},
-            "texture": {},
-            "arm_texture": {},
+            "texture":{},
             "light": {},
             "height": {},
             "camera": {},
-            "distractor": {}
+            "distractor": {},
+            "initial_pose":{}
         }
         
 
@@ -47,13 +48,15 @@ class DomainRandomizer:
         # random object orientation
         quat = self.default_value[object_name+"_body"].copy()
         quat = self.random_quaternion_around_axis(quat, ['x'],np.pi/2,-np.pi/2 )
-        quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/18,0)
-        quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/18,-np.pi/18)
+        # quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/18,0)
+        # quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/18,-np.pi/18)
 
         self.apply_object_in_ws(object_name,pos,quat)
 
         # save the radomed value
         self.random_state["object_in_ws"][object_name] = [pos,quat]
+
+        return pos
         
 
 
@@ -77,7 +80,7 @@ class DomainRandomizer:
         rgb = copy.deepcopy(self.default_value[material_name])
 
         # random rgba value around original color
-        rgb = self.random_rgb(rgb,0.02)
+        rgb = self.random_rgb(rgb,0.03)
         
         self.apply_object_color(material_name,rgb)
 
@@ -92,30 +95,29 @@ class DomainRandomizer:
     ############################################################
     ## 3. Random Texture
     ############################################################
-    def random_texture(self, geom_name,root = None):
+    def random_texture(self, geom_name,root_name = "model"):
         """
         random texture of the object
         """
-        if root == None:
-            root = self._model
-
+       
         if geom_name not in self.random_objs:
             self.create_random_assets([geom_name])
             self.random_objs.append(geom_name)
 
         # random texture
-        texture_file = self.get_random_png()
+        texture_file,idx = self.get_random_png()
         
-        self.apply_texture(geom_name,texture_file,root)
+        self.apply_texture(geom_name,idx,root_name)
         
         # save the radomed value        
-        self.random_state["texture"][geom_name] = [texture_file,root]
+        self.random_state["texture"][geom_name] = [idx,root_name]
         
 
     def random_texture_arm(self, arm):
         """
         random texture of the arm
         """
+        self._arm_model = arm._mjcf_root
         geom_list = arm._mjcf_root.find_all("geom")
         for i, geom in enumerate(geom_list):
             geom_class = geom._get_attribute("class")
@@ -123,14 +125,19 @@ class DomainRandomizer:
                 geom_name = geom._get_attribute("mesh")._get_attribute("name")
                 geom._set_attribute("name",geom_name)
                 if geom_name not in self.random_objs:
-                    self.create_random_assets([geom_name], arm._mjcf_root)
+                    self.create_random_assets([geom_name], "arm")
                     self.random_objs.append(geom_name)
 
-                self.random_texture(geom_name, arm._mjcf_root)
+                self.random_texture(geom_name, "arm")
     
-    def apply_texture(self, geom_name,texture_file,root):
+    def apply_texture(self, geom_name,idx,root_name):
+        if root_name == "model":
+            root = self._model
+        elif root_name == "arm":
+            root = self._arm_model
+
          # modify materials
-        root.find('texture', "random_{}".format(geom_name))._set_attribute("file",texture_file)
+        root.find('texture', "random_{}".format(geom_name))._set_attribute("file",self.texture_list[idx])
 
         # set material to corresponding random asset
         
@@ -254,8 +261,7 @@ class DomainRandomizer:
             self._model.find("geom","distractor_{}".format(i))._set_attribute("pos", pos)
 
         # random number of distractor
-        dis_num = np.random.randint(7,self.max_distractors)
-        print(dis_num)
+        dis_num = np.random.randint(3,self.max_distractors)
         for i in range(dis_num):
             # random type
             type_list = ["sphere", "capsule", "ellipsoid", "cylinder", "box"]
@@ -313,15 +319,30 @@ class DomainRandomizer:
             geom._set_attribute("pos", pos)
             geom._set_attribute("quat", quat)
 
+    ############################################################
+    ## 8. Random Initial postion 
+    ############################################################
+    def random_initial_position(self,hole_pose):
+        init_pos = self.get_random_ws_pos_clearance(hole_pose, 0.3)
+        init_quat = self.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
+        init_pose = np.concatenate([init_pos,init_quat]).reshape(7)
+
+        self.random_state["initial_pose"] = init_pose
+        return init_pose
             
     ##########################################
     ### Predefined random state
     ##########################################
     def apply_random_state(self,random_state):
+        
         for fcn_name, states in random_state.items():
-            random_fcn = getattr(self, f"apply_{fcn_name}", None)
-            for object_name,values in states.items():
-                random_fcn(object_name,*values)
+            print(fcn_name)
+            if fcn_name == "initial_pose":
+                pass
+            else:
+                random_fcn = getattr(self, f"apply_{fcn_name}", None)
+                for object_name,values in states.items():
+                    random_fcn(object_name,*values)
 
 
 
@@ -345,7 +366,7 @@ class DomainRandomizer:
               "table_radius":table_radius} 
         return ws
 
-    def get_random_ws_pos(self):    
+    def get_random_ws_pos(self, height = None):    
         
         # Unpack workspace parameters
         inner = self.ws["inner"]
@@ -354,6 +375,8 @@ class DomainRandomizer:
         max_angle = self.ws["max_angle"]
         min_height = self.ws["min_height"]
         max_height = self.ws["max_height"]
+        if height:
+            max_height = min_height + height
         
         # Generate random radius between inner and outer
         r = np.random.uniform(inner, outer)
@@ -374,7 +397,7 @@ class DomainRandomizer:
     def get_random_ws_pos_clearance(self, object_pos, clearance):    
         default_pos = [0.2, 0.0, 1.1]
         for i in range(1000):
-            ran_pos = self.get_random_ws_pos()
+            ran_pos = self.get_random_ws_pos(height=0.2)
             distance_to_object = np.linalg.norm(np.array(ran_pos) - np.array(object_pos))
             if distance_to_object > clearance:
                 return ran_pos
@@ -398,7 +421,7 @@ class DomainRandomizer:
             theta = np.random.uniform(-np.pi, min_angle/1.2)
         else:
             # Generate theta greater than max_angle
-            theta = np.random.uniform(max_angle/1.2, np.pi)
+            theta = np.random.uniform(max_angle/0.5, np.pi)
        
         # Generate random radius between outer and table
         r = np.random.uniform(inner+0.1, table_radius-0.1)
@@ -487,9 +510,10 @@ class DomainRandomizer:
         
         
         # Choose a random file from the list
-        random_png = random.choice(self.texture_list)
+        idx = random.randint(0, len(self.texture_list) - 1)
+        random_png = self.texture_list[idx]
         
-        return random_png
+        return random_png, idx
     
     def create_texture_list(sefl,directory):
         texture_list = []
@@ -507,20 +531,23 @@ class DomainRandomizer:
         
         return texture_list
 
-    def create_random_assets(self, object_list, root=None):
+    def create_random_assets(self, object_list, root_name="model"):
         """
         create random assets for the number of objects being randomized
         prevent create a new one everytime that we random texture
         """
-        if root == None:
+        if root_name == "model":
             root = self._model
+        elif root_name == "arm":
+            root = self._arm_model
 
         for obj in object_list:
+            f, _ = self.get_random_png()
             root.asset.add(
             "texture",
             name="random_{}".format(obj),
             type="2d",
-            file=self.get_random_png(),
+            file=f,
     
         )
         

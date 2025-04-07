@@ -118,7 +118,7 @@ class SetUp(py_trees.behaviour.Behaviour):
         self.blackboard.hole = hole
 
         self.blackboard.command = None
-        self.blackboard.state = None
+        self.blackboard.state = 0
         self.blackboard.success = False
         self.blackboard.terminate = False
         self.blackboard.update_period = update_period
@@ -342,7 +342,10 @@ class AssemblyBT:
     def __init__(self, physics, eef, hole):
         # py_trees.logging.level = py_trees.logging.Level.DEBUG        
         self.counter = 0 # 
-        self.update_period = 20
+        self.update_period = 10
+        self.state = 0
+        self.success = False
+        self.terminate = False
         # Create Behaviors
         set_up = SetUp("set_up",physics, eef, hole,self.update_period)
         move_to_hole = MoveToHole("move_to_hole")

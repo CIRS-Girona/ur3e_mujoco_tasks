@@ -60,14 +60,14 @@
     </body>
     
     <body name="workspace_center" euler="0  0.0  0" pos="0.0 0.0 1.0"></body>
-    <body name="camera_center1" euler="0  0.0  0" pos="0.4 0.0 1.0"></body>
-    <body name="camera_center2" euler="0  0.0  0" pos="0.3 0.0 1.0"></body>
+    <body name="camera_center1" euler="0  0.0  0" pos="0.5 0.0 1.0"></body>
+    <body name="camera_center2" euler="0  0.0  0" pos="0.5 0.0 1.0"></body>
 
-    <body name="fixed_camera1" euler="0  0  0" pos="0.2 0.0 2.0">
+    <body name="fixed_camera1" euler="0  0  0" pos="1.0 0.0 1.8">
       <camera name="fixed_camera1"  mode="targetbody" target="camera_center1" fovy="42.5" />
     </body>
 
-    <body name="fixed_camera2" euler="0  0  0" pos="0.3 1.0 1.4">
+    <body name="fixed_camera2" euler="0  0  0" pos="0.5 1.0 1.5">
       <camera name="fixed_camera2"  mode="targetbody" target="camera_center2" fovy="42.5" />
     </body>
 
