@@ -1,2 +1,3 @@
 pandas
 open3d
+spatialmath
