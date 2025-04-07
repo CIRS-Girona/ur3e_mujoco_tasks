@@ -1,4 +1,4 @@
 pandas
 open3d
 spatialmath-python
-py-tree
+py-trees

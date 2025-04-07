@@ -1,9 +1,6 @@
 #!/usr/bin/env python
 
 import py_trees
-from std_srvs.srv import Trigger, TriggerRequest
-from geometry_msgs.msg import PoseStamped
-from nav_msgs.msg import Odometry
 import numpy as np
 import time
 from manipulator_mujoco.utils.controller_utils import (
