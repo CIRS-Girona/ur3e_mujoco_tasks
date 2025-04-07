@@ -15,6 +15,9 @@ from ur3e_tasks.robots import Camera
 import cv2
 
 from ur3e_tasks.controllers import EEFVelocityController
+from ur3e_tasks.utils import DomainRandomizer
+from manipulator_mujoco.utils.mujoco_utils import get_site_jac
+from manipulator_mujoco.utils.controller_utils import pose_error
 
 class UR3ePegInHoleEnv(gym.Env):
 
@@ -27,17 +30,18 @@ class UR3ePegInHoleEnv(gym.Env):
         # Define observation space
         # observation_space = [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
         # force and torque limits taken from UR3e datasheet
-        self.obs_limit = np.array([30.0, 30.0, 30.0, 10.0, 10.0, 10.0, np.inf, np.inf, np.inf])
+        self.obs_limit = np.array([30.0, 30.0, 30.0, 10.0, 10.0, 10.0, np.inf, np.inf, np.inf, np.pi, np.pi, np.pi])
+        # self.obs_limit = np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0, np.inf, np.inf, np.inf])
         self.observation_space = spaces.Box(
             low=-self.obs_limit,
             high=self.obs_limit,
-            shape=(9,), 
+            shape=(12,), 
             dtype=np.float64
         )
 
         # Define action space
         # action_space = [vx, vy, vz, wx, wy] defined in the world frame
-        self.act_limit = np.array([0.5, 0.5, 0.5, 0.1, 0.1])
+        self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
         # self.act_limit = np.array([2.0, 2.0, 2.0, 1.0, 1.0])
         self.action_space = spaces.Box(
             low=-self.act_limit, 
@@ -56,9 +60,13 @@ class UR3ePegInHoleEnv(gym.Env):
         # peg in hole areana
         self._arena = PegInHoleArena()
 
+        # set randomizer
+        self._randomizer = DomainRandomizer(self._arena._mjcf_model)
+
         # mocap target that OSC will try to follow
         self._target = Target(self._arena.mjcf_model)
 
+       
 
         ### ur3e arm
         self._arm = Arm(
@@ -90,27 +98,45 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # Store hole properties
         # self._peg = self._arena.mjcf_model.find('joint', "peg_freejoint")
-        self._hole = self._arena.mjcf_model.find('body', "hole")       
+        self._hole = self._arena.mjcf_model.find('body', "hole")
+        self._hole_frame = self._arena.mjcf_model.find('body','hole_frame')
 
         # generate model
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
-        self._hole_pos = self._physics.bind(self._hole).xpos.copy()
+        # store original position of hole
+        self._hole_pos_default = self._physics.bind(self._hole).xpos.copy()
+        self._hole_quat_default = self._physics.bind(self._hole).xquat.copy()
 
         # Camera 
         self._camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "fixed_camera")
         self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
         # set up controller
-        # self._controller = OperationalSpaceController(
-        self._controller = EEFVelocityController(
+        # self._controller = EEFVelocityController(
+        #     physics=self._physics,
+        #     joints=self._arm.joints,
+        #     eef_site=self._arm.eef_site,
+        #     min_effort=-150.0,
+        #     max_effort=25.0,
+        #     kv=150 # TODO: tune this parameter
+        # )
+
+        ###########################################
+        # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
+        self._controller = OperationalSpaceController(
             physics=self._physics,
             joints=self._arm.joints,
             eef_site=self._arm.eef_site,
             min_effort=-150.0,
             max_effort=150.0,
-            kv=200 # TODO: tune this parameter
+            kp=200,
+            ko=200,
+            kv=50,
+            vmax_xyz=0.2,
+            vmax_abg=0.5,
         )
+        ###########################################
 
         # for GUI and time keeping
         self._timestep = self._physics.model.opt.timestep
@@ -124,17 +150,61 @@ class UR3ePegInHoleEnv(gym.Env):
         self.clearance = 0.03 # TODO: find out this value, or try to make it dynamically follow the mjcf model
         self.z_threshold = 0.05 # must be very small to make sure the peg is inserted to the hole
 
-        self.max_timestep = 60
+        self.max_timestep = 2500
 
     def _get_obs(self) -> np.ndarray:
         # end-effector force-torque
-        force = self._physics.data.sensor('ur3e/ee_force').data
-        torque = self._physics.data.sensor('ur3e/ee_torque').data
+        # TODO: check in which frame the values are defined
+        sensor_force = self._physics.data.sensor('ur3e/ee_force').data
+        print("sensor_force = ", sensor_force)
+        sensor_torque = self._physics.data.sensor('ur3e/ee_torque').data
+        print("sensor_torque = ", sensor_torque)
+
+        # ## Compute expected internal forces using joint torques and Jacobian
+        # attachment_site = self._arm._mjcf_root.find('site','attachment_site')
+        # attachment_site_id = self._physics.bind(attachment_site).element_id
+        # J = get_site_jac(
+        #     self._physics.model.ptr, 
+        #     self._physics.data.ptr, 
+        #     attachment_site_id,
+        # )
+        # print("J = ", J)
+
+        # R_world_to_sensor = self._physics.bind(attachment_site).xmat.reshape(3,3)
+        # print("R_world_to_sensor = ", R_world_to_sensor)
+
+        # tau = self._physics.data.qfrc_passive + self._physics.data.qfrc_bias
+        # print("tau = ",tau)
+
+        # expected_force = np.linalg.pinv(J.T) @ tau # in world frame
+        # # Transform internal force to sensor frame
+        # F_int_sensor = R_world_to_sensor.T @ expected_force[:3]
+        # T_int_sensor = R_world_to_sensor.T @ expected_force[3:]
+
+        # print("internal force in sensor frame = ", F_int_sensor)
+        # print("internal torque in sensor frame = ", T_int_sensor)
+
+        # external_force = sensor_force - F_int_sensor
+        # external_torque = sensor_torque - T_int_sensor
+
+
         # position of the hole w.r.t. peg
         peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
         # NOTE: should I define peg_pos from the joints instead of directly from sim data?
-        hole_wrt_peg = self._hole_pos - peg_end_pos
-        return np.concatenate((force,torque,hole_wrt_peg))
+        # hole_wrt_peg_pos = self._hole_pos - peg_end_pos
+
+        # orientation of the hole w.r.t. peg
+        peg_end_quat = self._physics.bind(self._peg_end).xquat.copy()
+        peg_end_quat_xyzw = [peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]]
+        # print("peg end quat = ", peg_end_quat)
+        # hole_wrt_peg_quat = orientation_error(quat2mat(self._hole_quat), quat2mat(peg_end_quat))
+
+        ## alternative: directly calculate pose difference
+        peg_end_pose = np.concatenate((peg_end_pos,peg_end_quat_xyzw))
+        hole_frame_pose = np.concatenate((self._hole_pos, self._hole_quat_xyzw))
+        hole_wrt_peg_pose = pose_error(hole_frame_pose,peg_end_pose)
+        print("hole_wrt_peg_pose = ", hole_wrt_peg_pose)
+        return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pose))
 
     def _get_info(self) -> dict:
         # TODO come up with an info dict that makes sense for your RL task
@@ -142,48 +212,49 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def reset(self, seed=None, options=None) -> tuple:
         super().reset(seed=seed)
-        # reset flags
-        # self.i = 0
 
         # reset physics
         with self._physics.reset_context():
-            for i in range(500): # give a couple of time to finish reset (~500-2000 steps)
-                self.i = self.i +1
-                # put arm in a reasonable starting position
-                self._physics.bind(self._arm.joints).qpos = [
-                    -1.5707,
-                    -1.5707,
-                    1.5707,
-                    -1.5707,
-                    -1.5707,
-                    0.0,
-                ]
+            # put arm in a reasonable starting position
+            self._physics.bind(self._arm.joints).qpos = [
+                -1.5707,
+                -1.5707,
+                1.5707,
+                -1.5707,
+                -1.5707,
+                0.0,
+            ]
 
-                #set gravity to zero
-                self._physics.model.opt.gravity = [0,0,0]
+            # randomize hole position and orientation
+            rand_pos = self._randomizer.get_random_ws_pos()
+            self._physics.bind(self._hole).mocap_pos[:] = rand_pos
 
-                # # put peg into gripper position
-                # gripper_pose = self._arm.get_eef_pose(self._physics)
-                # gripper_pose[2] = gripper_pose[2] - 0.2
-                # self._physics.bind(self._peg).qpos[:3] = gripper_pose[:3]
+            rand_quat = self._randomizer.get_random_quat(self._hole_quat_default)
+            self._physics.bind(self._hole).mocap_quat[:] = rand_quat
 
-                # # set gripper to be active to hold the peg
-                # self._physics.bind(self._gripper._actuator).ctrl = 250
+            # update physics with the randomized position
+            self._physics.step()
 
-                self._physics.step()
-                if self._render_mode == "human":
-                    self._render_frame()
-                # time.sleep(0.05)
-            
-                
+            # store the randomized position of the hole (for observation)
+            self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
+            print("hole pos after reset = ", self._hole_pos)
+            self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
+            self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
 
-            # # put target in a reasonable starting position
-            # hole_pos = self._physics.bind(self._hole).xpos.copy()
-            # hole_pos[2] = hole_pos[2] + 0.2
-            # self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
+            ###########################################
+            # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
+            # put target in a reasonable starting position
+            target_pos = self._hole_pos.copy()
+            R_world_to_hole = self._physics.bind(self._hole_frame).xmat.reshape(3,3)
+            offset = R_world_to_hole @ np.array([0,0,0.2]).T
+            print("offset = ",offset)
+            target_pos += offset
+            self._target.set_mocap_pose(self._physics, position=target_pos[:3], quaternion=self._hole_quat_xyzw.copy())
+            ############################################
+
 
         # reset flag
         self.i = 0
@@ -204,31 +275,30 @@ class UR3ePegInHoleEnv(gym.Env):
         # append wz=0 before passing to controller
         target_vel = np.concatenate((action,[0]))
 
-        # # peg in hole testing logic
-        # if self.i < 1500:
-        #     pass
-        # elif self.i < 2500:
-        #     hole_pos = self._physics.bind(self._hole).xpos.copy()
-        #     hole_pos[2] = hole_pos[2] + 0.1
-        #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=[0, 0, 0, 1])
-        # else:
-        #     terminated = True
+        ###########################################
+        # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
+        # peg in hole testing logic
+        if self.i < 500:
+            pass
+        elif self.i < 2500:
+            hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
+            hole_pos[2] = hole_pos[2]
+            target_quat = [self._hole_quat.copy()[1], self._hole_quat.copy()[2], self._hole_quat.copy()[3], self._hole_quat.copy()[0]]
+            self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=target_quat)
+        else:
+            terminated = True
 
-        # # set target for ee
-        # target_pose = self._target.get_mocap_pose(self._physics)
-
-        # self._controller.run(target_pose)
-        
-        # # step physics
-        # self._physics.step()
+        # set target for ee
+        target_pose = self._target.get_mocap_pose(self._physics)
+        ###########################################
 
         # run velocity controller to move with a target velocity
-        # each action is executed 1 second
+        # each action is executed 10 times before getting new observation
         for _ in range(10):
-            self._controller.run(target_vel)
+            self._controller.run(target_pose) # CHANGE TO target_vel TO USE VELOCITY CONTROLLER
             # step physics
             self._physics.step()
-            time.sleep(0.1)
+            #time.sleep(0.01)
             # render frame
             if self._render_mode == "human":
                 self._render_frame()
@@ -245,22 +315,29 @@ class UR3ePegInHoleEnv(gym.Env):
         # reward based on distance
         # TODO: refine the values for max_dist
         max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
-        reward_dist = self.map_reward(observation[-3:],max_dist)
+        reward_dist = self.map_reward(observation[6:9],max_dist)
+        print("reward_dist = ",reward_dist)
 
         # reward based on magnitude of action taken
         reward_act = self.map_reward(action,self.act_limit)
+        print("reward_act = ",reward_act)
 
         # reward based on contact force
         reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
+        print("reward_force = ",reward_force)
 
         # reward (or penalty, actually) based on time step taken
         reward_time = -0.1
+        print("reward_time = ",reward_time)
 
         # reward/penalty based on termination
         # task completion is defined based on x-y distance (must be less than the clearance) 
         # and z distance (must be less than a certain threshold)
-        task_completed = (np.linalg.norm(observation[-3:-1]) < self.clearance) and (np.abs(observation[-1]) < self.z_threshold)
+        # TODO: modify task_completed to comply with randomm rotations (now it's still in world frame!)
+        task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
+
         # safety violation occurs if any of the detected forces and torques exceeds the limit
+        # TODO: add joint limits
         safety_violation = np.any(np.abs(observation[:6]) > self.obs_limit[:6])
         # assign reward and flags
         if task_completed:
@@ -272,6 +349,8 @@ class UR3ePegInHoleEnv(gym.Env):
         else:
             reward_termination = 0
 
+        print("reward_termination = ", reward_termination)
+
         # compute total reward = weighted average
         reward_list = [reward_dist,reward_act,reward_force,reward_time,reward_termination]
         reward = np.dot(self.reward_weights,reward_list)
@@ -281,7 +360,8 @@ class UR3ePegInHoleEnv(gym.Env):
         info = {
             "forces":observation[:3],
             "torques":observation[3:6],
-            "distance_to_hole":observation[6:],
+            "distance_to_hole":observation[6:9],
+            "orientation_difference":observation[9:],
             "reward_dist": reward_dist,
             "reward_act": reward_act,
             "reward_force": reward_force,
