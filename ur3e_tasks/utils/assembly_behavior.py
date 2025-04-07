@@ -1,7 +1,6 @@
 #!/usr/bin/env python
 
 import py_trees
-import rospy
 from std_srvs.srv import Trigger, TriggerRequest
 from geometry_msgs.msg import PoseStamped
 from nav_msgs.msg import Odometry
