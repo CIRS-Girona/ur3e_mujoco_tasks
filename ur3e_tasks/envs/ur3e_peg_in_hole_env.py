@@ -149,7 +149,7 @@ class UR3ePegInHoleEnv(gym.Env):
         self.reward_weights = [1.0,1.0,1.0,1.0,1.0]
         self.clearance = 0.03 # TODO: find out this value, or try to make it dynamically follow the mjcf model
         self.z_threshold = 0.05 # must be very small to make sure the peg is inserted to the hole
-
+        self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
         self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
 
         self.max_timestep = 2500
@@ -314,48 +314,7 @@ class UR3ePegInHoleEnv(gym.Env):
         observation = self._get_obs() # return [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
 
         ## Reward function
-        # reward based on distance
-        # TODO: refine the values for max_dist
-        max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
-        reward_dist = self.map_reward(observation[6:9],max_dist)
-        print("reward_dist = ",reward_dist)
-
-        # reward based on magnitude of action taken
-        reward_act = self.map_reward(action,self.act_limit)
-        print("reward_act = ",reward_act)
-
-        # reward based on contact force
-        reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
-        print("reward_force = ",reward_force)
-
-        # reward (or penalty, actually) based on time step taken
-        reward_time = -0.1
-        print("reward_time = ",reward_time)
-
-        # reward/penalty based on termination
-        # task completion is defined based on x-y distance (must be less than the clearance) 
-        # and z distance (must be less than a certain threshold)
-        # TODO: modify task_completed to comply with random rotations (now it's still in world frame!)
-        task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
-
-        # safety violation occurs if any of the detected forces and torques exceeds the limit
-        safety_violation = self.check_safety_violation(observation[:6])
-
-        # assign reward and flags
-        if task_completed:
-            reward_termination = 200
-            terminated = True
-        elif safety_violation:
-            reward_termination = -10
-            terminated = True
-        else:
-            reward_termination = 0
-
-        print("reward_termination = ", reward_termination)
-
-        # compute total reward = weighted average
-        reward_list = [reward_dist,reward_act,reward_force,reward_time,reward_termination]
-        reward = np.dot(self.reward_weights,reward_list)
+        reward, terminated, reward_list = self._get_reward(observation,action)
 
         # info = self._get_info()
         
@@ -364,11 +323,11 @@ class UR3ePegInHoleEnv(gym.Env):
             "torques":observation[3:6],
             "distance_to_hole":observation[6:9],
             "orientation_difference":observation[9:],
-            "reward_dist": reward_dist,
-            "reward_act": reward_act,
-            "reward_force": reward_force,
-            "reward_time": reward_time,
-            "reward_termination": reward_termination
+            "reward_distance": reward_list[0],
+            "reward_action": reward_list[1],
+            "reward_force": reward_list[2],
+            "reward_time": reward_list[3],
+            "reward_termination": reward_list[4]
         }
 
         return observation, reward, terminated, truncated, info
@@ -433,6 +392,52 @@ class UR3ePegInHoleEnv(gym.Env):
         """
         if self._viewer is not None:
             self._viewer.close()
+
+    def _get_reward(self,observation,action):
+        ## Reward function
+        # reward based on distance
+        reward_dist = self.map_reward(observation[6:9],self.max_dist)
+        print("reward_dist = ",reward_dist)
+
+        # reward based on magnitude of action taken
+        reward_act = self.map_reward(action,self.act_limit)
+        print("reward_act = ",reward_act)
+
+        # reward based on contact force
+        reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
+        print("reward_force = ",reward_force)
+
+        # reward (or penalty, actually) based on time step taken
+        reward_time = -0.1
+        print("reward_time = ",reward_time)
+
+        # reward/penalty based on termination
+        # task completion is defined based on x-y distance (must be less than the clearance) 
+        # and z distance (must be less than a certain threshold)
+        # TODO: modify task_completed to comply with random rotations (now it's still in world frame!)
+        task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
+
+        # safety violation occurs if any of the detected forces and torques exceeds the limit
+        safety_violation = self.check_safety_violation(observation[:6])
+
+        # assign reward and flags
+        if task_completed:
+            reward_termination = 200
+            terminated = True
+        elif safety_violation:
+            reward_termination = -10
+            terminated = True
+        else:
+            reward_termination = 0
+            terminated = False
+
+        print("reward_termination = ", reward_termination)
+
+        # compute total reward = weighted average
+        reward_list = [reward_dist,reward_act,reward_force,reward_time,reward_termination]
+        reward = np.dot(self.reward_weights,reward_list)
+
+        return reward, terminated, reward_list
 
     ############################
     # HELPER FUNCTIONS
