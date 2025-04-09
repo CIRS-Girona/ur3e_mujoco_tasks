@@ -530,6 +530,9 @@ class UR3eAssemblyEnv(gym.Env):
         elif self.i % self.frame_skipped == 0: # add new frame to the list 
             self.obs_list.pop(0)
             self.obs_list.append(new_obs)
+        else:
+            self.obs_list.pop(-1)
+            self.obs_list.append(new_obs)
 
         # prepare obs for model
         
