@@ -147,8 +147,11 @@ class UR3ePegInHoleEnv(gym.Env):
         # more attributes related to rewards computation
         # TODO: define more appropriate values
         self.reward_weights = [1.0,1.0,1.0,1.0,1.0]
+
         self.clearance = 0.03 # TODO: find out this value, or try to make it dynamically follow the mjcf model
         self.z_threshold = 0.05 # must be very small to make sure the peg is inserted to the hole
+
+        self.dist_threshold = 0.01 # must be very small to make sure the peg is inserted to the hole
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
         self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
 
@@ -415,7 +418,11 @@ class UR3ePegInHoleEnv(gym.Env):
         # task completion is defined based on x-y distance (must be less than the clearance) 
         # and z distance (must be less than a certain threshold)
         # TODO: modify task_completed to comply with random rotations (now it's still in world frame!)
-        task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
+        # task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
+        
+        # task completion is defined based on distance between hole and peg (must be less than a certain threshold)
+        print("distance from hole = ", np.linalg.norm(observation[6:9]))
+        task_completed = np.linalg.norm(observation[6:9]) < self.dist_threshold
 
         # safety violation occurs if any of the detected forces and torques exceeds the limit
         safety_violation = self.check_safety_violation(observation[:6])

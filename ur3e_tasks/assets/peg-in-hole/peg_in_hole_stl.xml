@@ -79,7 +79,7 @@
       <geom mesh="hole8" class="collision"/>
       <geom mesh="hole9" class="collision"/>
       <geom mesh="hole10" class="collision"/>
-      <body name="hole_frame" euler="-1.5707 0 0" pos="0 0 0"/>
+      <body name="hole_frame" euler="-1.5707 0 0" pos="0 0.03 0"/>
       <!-- <geom mesh="hole0" class="collision"/> -->
     </body>
 
