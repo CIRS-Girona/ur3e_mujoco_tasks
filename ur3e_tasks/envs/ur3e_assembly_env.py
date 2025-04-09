@@ -534,7 +534,7 @@ class UR3eAssemblyEnv(gym.Env):
             self.obs_list.pop(-1)
             self.obs_list.append(new_obs)
 
-        # prepare obs for model
+        
         
         # Prepare stacked observations for the model (3 frames per channel + state info)
         front_images = []
@@ -584,6 +584,7 @@ class UR3eAssemblyEnv(gym.Env):
             'joints': joints.unsqueeze(0)           # Shape (3 x 6)
         }
 
+        self.visualize_obs(stacked_obs)
             
         
         return stacked_obs
@@ -668,3 +669,43 @@ class UR3eAssemblyEnv(gym.Env):
         
         im = np.asarray(pil_im)
         return im
+    
+    def visualize_obs(self,obs):
+        # Extract batch data for the selected sample
+        front_cam = obs["front"][0].cpu().numpy()  # (3, H, W, 3)
+        side_cam = obs["side"][0].cpu().numpy()  # (3, H, W, 3)
+        hand_cam = obs["hand"][0].cpu().numpy()  # (3, H, W, 3)
+
+        # Convert images to OpenCV format (H, W, C) and scale up for visibility
+        def preprocess_img(img):
+            """
+            Preprocess image from [f, H, W, C] to OpenCV format [H, W, C] for display.
+            """
+            # img = np.transpose(img, (1, 2, 0))  # Convert [f, H, W, C] -> [H, W, f, C] -> [H, W, C]
+            img = np.clip(img * 255, 0, 255).astype(np.uint8)  # Convert back to 0-255 for display
+            return img  # Return as H, W, C
+
+        # Process each camera's image and time step (f=3)
+        front_cam_imgs = [preprocess_img(front_cam[i]) for i in range(3)]  # (t-2, t-1, t)
+        side_cam_imgs = [preprocess_img(side_cam[i]) for i in range(3)]
+        hand_cam_imgs = [preprocess_img(hand_cam[i]) for i in range(3)]
+
+        # Stack images in one grid (3x3)
+        # The layout of the images will be:
+        # front#t-2, front#t-1, front#t
+        # side#t-2, side#t-1, side#t
+        # hand#t-2, hand#t-1, hand#t
+
+        top_row = np.concatenate(front_cam_imgs, axis=1)  # Concatenate the 3 front camera frames
+        middle_row = np.concatenate(side_cam_imgs, axis=1)  # Concatenate the 3 side camera frames
+        bottom_row = np.concatenate(hand_cam_imgs, axis=1)  # Concatenate the 3 hand camera frames
+
+        # Combine all rows vertically
+        all_images = np.vstack([top_row, middle_row, bottom_row])
+
+        # Display the images in one window
+        cv2.imshow("Camera Views: Front, Side, Hand (t-2, t-1, t)", all_images)
+        cv2.waitKey(1)  # Wait for key press
+        
+
+        
