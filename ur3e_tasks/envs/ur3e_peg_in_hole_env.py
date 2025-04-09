@@ -150,6 +150,8 @@ class UR3ePegInHoleEnv(gym.Env):
         self.clearance = 0.03 # TODO: find out this value, or try to make it dynamically follow the mjcf model
         self.z_threshold = 0.05 # must be very small to make sure the peg is inserted to the hole
 
+        self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
+
         self.max_timestep = 2500
 
     def _get_obs(self) -> np.ndarray:
@@ -233,7 +235,7 @@ class UR3ePegInHoleEnv(gym.Env):
             self._physics.bind(self._hole).mocap_quat[:] = rand_quat
 
             # update physics with the randomized position
-            self._physics.step()
+            self._physics.forward()
 
             # store the randomized position of the hole (for observation)
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
@@ -333,12 +335,12 @@ class UR3ePegInHoleEnv(gym.Env):
         # reward/penalty based on termination
         # task completion is defined based on x-y distance (must be less than the clearance) 
         # and z distance (must be less than a certain threshold)
-        # TODO: modify task_completed to comply with randomm rotations (now it's still in world frame!)
+        # TODO: modify task_completed to comply with random rotations (now it's still in world frame!)
         task_completed = (np.linalg.norm(observation[6:8]) < self.clearance) and (np.abs(observation[8]) < self.z_threshold)
 
         # safety violation occurs if any of the detected forces and torques exceeds the limit
-        # TODO: add joint limits
-        safety_violation = np.any(np.abs(observation[:6]) > self.obs_limit[:6])
+        safety_violation = self.check_safety_violation(observation[:6])
+
         # assign reward and flags
         if task_completed:
             reward_termination = 200
@@ -447,3 +449,24 @@ class UR3ePegInHoleEnv(gym.Env):
         '''
         reward = 1 - np.linalg.norm(obs/max)
         return np.clip(reward,0,1)
+    
+    def check_safety_violation(self,ee_force_torque):
+        '''
+            Returns True if safety violation occurs.
+            Safety violation is defined by one of these conditions:
+            * end-effector (or tool flange) force-torque sensor reading in any axis exceeds its limit,
+            * torque in any of the joints exceeds its limit.
+        '''
+        # end-effector force-torque
+        ee_safety_violation = np.any(np.abs(ee_force_torque) >= self.obs_limit[:6])
+
+        # extract joint torques
+        qfrc_bias = self._physics.data.qfrc_bias
+        qfrc_passive = self._physics.data.qfrc_passive
+        qfrc_applied = self._physics.data.qfrc_applied
+
+        total_joint_torques = qfrc_bias + qfrc_passive + qfrc_applied
+
+        joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
+
+        return ee_safety_violation or joint_safety_violation

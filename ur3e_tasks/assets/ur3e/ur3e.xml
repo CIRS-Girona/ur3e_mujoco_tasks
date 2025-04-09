@@ -67,7 +67,7 @@
       <inertial mass="2.0" pos="0 0 0" diaginertia="0.0030531654454 0.0030531654454 0.005625"/>
       <geom mesh="base_0" material="black" class="visual"/>
       <geom mesh="base_1" material="jointgray" class="visual"/>
-      <body name="shoulder_link" pos="0 0 0.163">
+      <body name="shoulder_link" pos="0 0 0.152">
         <inertial mass="2.0" pos="0 0 0" diaginertia="0.008093163429399999 0.008093163429399999 0.005625"/>
         <joint name="shoulder_pan_joint" class="size2" axis="0 0 1"/>
         <geom mesh="shoulder_0" material="urblue" class="visual"/>
@@ -148,7 +148,7 @@
   </keyframe> -->
 
   <sensor>
-    <force name="ee_force" site="attachment_site"/>
-    <torque name="ee_torque" site="attachment_site"/>
+    <force name="ee_force" site="attachment_site" cutoff="30"/>
+    <torque name="ee_torque" site="attachment_site" cutoff="10"/>
   </sensor>
 </mujoco>
