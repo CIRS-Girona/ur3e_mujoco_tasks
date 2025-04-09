@@ -21,7 +21,7 @@ from PIL import Image
 from manipulator_mujoco.utils.transform_utils import (
     mat2quat,
 )
-
+import torch
 class UR3eAssemblyEnv(gym.Env):
 
     metadata = {
@@ -40,12 +40,19 @@ class UR3eAssemblyEnv(gym.Env):
             low=-0.1, high=0.1, shape=(6,), dtype=np.float64
         )
 
+        # model related
+        self._model = None
+        self.obs_list = []
+        self.frame_skipped = 5
+
+
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self._viewer = None
         self._render_mode = render_mode
         self.show_cam = False
         self.random_once = False
         self.random_domain = True
+        self._random_state = None
         ############################
         # create MJCF model
         ############################
@@ -200,6 +207,7 @@ class UR3eAssemblyEnv(gym.Env):
         super().reset(seed=seed)
         # reset flags
         self.i = 0
+        self.obs_list = []
         # domain randomize
         if self.random_domain:
             hole_pos = self._randomizer.random_object_in_ws("hole")
@@ -240,9 +248,9 @@ class UR3eAssemblyEnv(gym.Env):
             self._randomizer.random_distractors()
             self._randomizer.random_texture_arm(self._arm)
             init_pose = self._randomizer.random_initial_position(hole_pos.copy())
-            
-            self._randomizer.apply_random_state(self._random_state )
-            init_pose = self._random_state["initial_pose"]
+            if self._random_state is not None:
+                self._randomizer.apply_random_state(self._random_state )
+                init_pose = self._random_state["initial_pose"]
         
         # recomplie model
         self.complie_model()
@@ -499,6 +507,83 @@ class UR3eAssemblyEnv(gym.Env):
         else:
             vel_cmd = self._vel_replay[self.i]
         return vel_cmd
+    
+    def get_action_model(self,obs):
+        stacked_obs = self.stack_obs(obs)
+        front_im = stacked_obs["front"]
+        side_im = stacked_obs["side"]
+        hand_im = stacked_obs["hand"]
+        ee_pose = stacked_obs["ee_pose"]
+        joint_state = stacked_obs["joints"]
+        with torch.no_grad():  # Disable gradient calculation for inference
+            vel, pose, est_state = self._model(front_im, side_im, hand_im, ee_pose, joint_state)
+
+        # print(np.array(vel).reshape(6))
+        return np.array(vel).reshape(6), np.array(pose).reshape(7), torch.argmax(est_state)
+    
+    def stack_obs(self,new_obs):
+        # for first frames
+        if len(self.obs_list) == 0:
+            self.obs_list.append(new_obs)
+            self.obs_list.append(new_obs)
+            self.obs_list.append(new_obs)
+        elif self.i % self.frame_skipped == 0: # add new frame to the list 
+            self.obs_list.pop(0)
+            self.obs_list.append(new_obs)
+
+        # prepare obs for model
+        
+        # Prepare stacked observations for the model (3 frames per channel + state info)
+        front_images = []
+        side_images = []
+        hand_images = []
+
+        ee_pose = []
+        joints = []
+        
+        # Stack frames and state information (ee_pose and joints)
+        for obs in self.obs_list:
+            front_images.append(obs['frame1'])  # Frame 1
+            side_images.append(obs['frame2'])  # Frame 2
+            hand_images.append(obs['frame3'])  # Frame 3
+            ee_pose.append(obs['ee_pose'])  # ee_pose
+            joints.append(obs['joints'])  # joints
+        
+        # Convert lists to tensors (assuming images are torch tensors)
+        front_images = torch.tensor(np.stack([
+            front_images[0], front_images[1], front_images[2]
+        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
+        side_images = torch.tensor(np.stack([
+            side_images[0], side_images[1], side_images[2]
+        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
+        hand_images = torch.tensor(np.stack([
+            hand_images[0], hand_images[1], hand_images[2]
+        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
+        ee_pose = torch.tensor(np.stack([
+            ee_pose[0].reshape(7),
+            ee_pose[1].reshape(7),
+            ee_pose[2].reshape(7)
+        ]), dtype=torch.float32)  # (3,7)
+
+        joints = torch.tensor(np.stack([
+            joints[0].reshape(6),
+            joints[1].reshape(6),
+            joints[2].reshape(6)
+        ]), dtype=torch.float32)  # (3,6)
+
+     
+        # Combine the images and the states (ee_pose and joints)
+        stacked_obs = {
+            'front': front_images.unsqueeze(0),  # Shape (3 * B x C x H x W)
+            'side': side_images.unsqueeze(0),
+            'hand': hand_images.unsqueeze(0),
+            'ee_pose': ee_pose.unsqueeze(0),        # Shape (3 x 7)
+            'joints': joints.unsqueeze(0)           # Shape (3 x 6)
+        }
+
+            
+        
+        return stacked_obs
 
     ###############################################################
     #### Utils Functions 
