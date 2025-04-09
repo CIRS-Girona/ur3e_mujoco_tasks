@@ -43,7 +43,10 @@ class UR3eAssemblyEnv(gym.Env):
         # model related
         self._model = None
         self.obs_list = []
-        self.frame_skipped = 5
+        self.frame_hist = 3
+        self.frames_skipped = 5
+        self.frames_buffer = []
+
 
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -522,18 +525,19 @@ class UR3eAssemblyEnv(gym.Env):
         return np.array(vel).reshape(6), np.array(pose).reshape(7), torch.argmax(est_state)
     
     def stack_obs(self,new_obs):
-        # for first frames
-        if len(self.obs_list) == 0:
-            self.obs_list.append(new_obs)
-            self.obs_list.append(new_obs)
-            self.obs_list.append(new_obs)
-        elif self.i % self.frame_skipped == 0: # add new frame to the list 
-            self.obs_list.pop(0)
-            self.obs_list.append(new_obs)
+        buffer_length = self.frames_skipped * self.frame_hist
+        # for first frame 
+        if len(self.frames_buffer) == 0:
+            self.frames_buffer = [new_obs]* buffer_length
+        # mange frame buffer
         else:
-            self.obs_list.pop(-1)
-            self.obs_list.append(new_obs)
+            self.frames_buffer.pop(0)
+            self.frames_buffer.append(new_obs) 
 
+        self.obs_list = [0,0,0]
+        self.obs_list[2] = self.frames_buffer[-1]
+        self.obs_list[1] = self.frames_buffer[-1 - self.frames_skipped]
+        self.obs_list[0] = self.frames_buffer[-1 - self.frames_skipped*2]
         
         
         # Prepare stacked observations for the model (3 frames per channel + state info)
