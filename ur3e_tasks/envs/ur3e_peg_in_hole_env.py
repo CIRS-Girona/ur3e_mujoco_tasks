@@ -89,7 +89,7 @@ class UR3ePegInHoleEnv(gym.Env):
         self._peg_end = peg_ee.find('body','peg_end')
 
         # attach EE to arm
-        self._arm.attach_tool(peg_ee, pos=[0, 0, 0], quat=[0, 0, 0, 1])
+        self._arm.attach_tool(peg_ee, pos=[0, 0, 0], quat=[1, 0, 0, 0])
         # move eef_site to the peg tip
         self._arm._eef_site = self._arm._mjcf_root.find('site','peg_ee/peg_end_site')
 
