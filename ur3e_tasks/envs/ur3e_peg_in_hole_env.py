@@ -18,6 +18,7 @@ from ur3e_tasks.controllers import EEFVelocityController
 from ur3e_tasks.utils import DomainRandomizer
 from manipulator_mujoco.utils.mujoco_utils import get_site_jac
 from manipulator_mujoco.utils.controller_utils import pose_error
+from manipulator_mujoco.utils.transform_utils import mat2quat
 
 class UR3ePegInHoleEnv(gym.Env):
 
@@ -28,25 +29,23 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def __init__(self, render_mode=None):
         # Define observation space
-        # observation_space = [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
+        # observation_space = [end-effector force and torque, pose of hole w.r.t. peg, joint positions]
         # force and torque limits taken from UR3e datasheet
         self.obs_limit = np.array([30.0, 30.0, 30.0, # force limits
                                    10.0, 10.0, 10.0, # torque limits
                                    np.inf, np.inf, np.inf, # distance limits
-                                   np.pi, np.pi, np.pi, # angular difference limits
+                                   1.0, 1.0, 1.0, 1.0, # angular difference (quat) limits
                                    np.pi, np.pi, np.pi, np.pi, np.pi, np.pi]) # joint position limits
-        # self.obs_limit = np.array([100.0, 100.0, 100.0, 10.0, 10.0, 10.0, np.inf, np.inf, np.inf])
         self.observation_space = spaces.Box(
             low=-self.obs_limit,
             high=self.obs_limit,
-            shape=(18,), 
+            shape=(19,), 
             dtype=np.float64
         )
 
         # Define action space
         # action_space = [vx, vy, vz, wx, wy] defined in the world frame
         self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
-        # self.act_limit = np.array([2.0, 2.0, 2.0, 1.0, 1.0])
         self.action_space = spaces.Box(
             low=-self.act_limit, 
             high=self.act_limit, 
@@ -158,62 +157,56 @@ class UR3ePegInHoleEnv(gym.Env):
         self.max_timestep = 2500
 
     def _get_obs(self) -> np.ndarray:
-        # end-effector force-torque
-        # TODO: check in which frame the values are defined
+        ## end-effector force-torque
         sensor_force = self._physics.data.sensor('ur3e/ee_force').data.copy()
         print("sensor_force = ", sensor_force)
         sensor_torque = self._physics.data.sensor('ur3e/ee_torque').data.copy()
         print("sensor_torque = ", sensor_torque)
 
-        # ## Compute expected internal forces using joint torques and Jacobian
-        # attachment_site = self._arm._mjcf_root.find('site','attachment_site')
-        # attachment_site_id = self._physics.bind(attachment_site).element_id
-        # J = get_site_jac(
-        #     self._physics.model.ptr, 
-        #     self._physics.data.ptr, 
-        #     attachment_site_id,
-        # )
-        # print("J = ", J)
+        ########################################################
+        # # position of the hole w.r.t. peg
+        # peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
+        # # NOTE: should I define peg_pos from the joints instead of directly from sim data?
+        # # hole_wrt_peg_pos = self._hole_pos - peg_end_pos
 
-        # R_world_to_sensor = self._physics.bind(attachment_site).xmat.reshape(3,3)
-        # print("R_world_to_sensor = ", R_world_to_sensor)
+        # # orientation of the hole w.r.t. peg
+        # peg_end_quat = self._physics.bind(self._peg_end).xquat.copy()
+        # peg_end_quat_xyzw = [peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]]
+        # # print("peg end quat = ", peg_end_quat)
+        # # hole_wrt_peg_quat = orientation_error(quat2mat(self._hole_quat), quat2mat(peg_end_quat))
 
-        # tau = self._physics.data.qfrc_passive + self._physics.data.qfrc_bias
-        # print("tau = ",tau)
-
-        # expected_force = np.linalg.pinv(J.T) @ tau # in world frame
-        # # Transform internal force to sensor frame
-        # F_int_sensor = R_world_to_sensor.T @ expected_force[:3]
-        # T_int_sensor = R_world_to_sensor.T @ expected_force[3:]
-
-        # print("internal force in sensor frame = ", F_int_sensor)
-        # print("internal torque in sensor frame = ", T_int_sensor)
-
-        # external_force = sensor_force - F_int_sensor
-        # external_torque = sensor_torque - T_int_sensor
-
-
-        # position of the hole w.r.t. peg
+        # ## alternative: directly calculate pose difference
+        # peg_end_pose = np.concatenate((peg_end_pos,peg_end_quat_xyzw))
+        # hole_frame_pose = np.concatenate((self._hole_pos, self._hole_quat_xyzw))
+        # hole_wrt_peg_pose = pose_error(hole_frame_pose,peg_end_pose)
+        # print("hole_wrt_peg_pose = ", hole_wrt_peg_pose)
+        ############################################################################
+        
+        ## position and orientation of hole w.r.t. peg
+        # position and orientation of peg tip w.r.t. world
         peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
-        # NOTE: should I define peg_pos from the joints instead of directly from sim data?
-        # hole_wrt_peg_pos = self._hole_pos - peg_end_pos
+        peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
+        peg_end_rot = peg_end_rot.reshape(3,3)
+        peg_end_transform = np.block([[peg_end_rot,peg_end_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
 
-        # orientation of the hole w.r.t. peg
-        peg_end_quat = self._physics.bind(self._peg_end).xquat.copy()
-        peg_end_quat_xyzw = [peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]]
-        # print("peg end quat = ", peg_end_quat)
-        # hole_wrt_peg_quat = orientation_error(quat2mat(self._hole_quat), quat2mat(peg_end_quat))
+        # position and orientation of hole w.r.t. world
+        hole_transform = np.block([[self._hole_rot,self._hole_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
 
-        ## alternative: directly calculate pose difference
-        peg_end_pose = np.concatenate((peg_end_pos,peg_end_quat_xyzw))
-        hole_frame_pose = np.concatenate((self._hole_pos, self._hole_quat_xyzw))
-        hole_wrt_peg_pose = pose_error(hole_frame_pose,peg_end_pose)
-        print("hole_wrt_peg_pose = ", hole_wrt_peg_pose)
+        # multiply transform matrices to obtain transformation from peg to hole
+        hole_wrt_peg_transform = np.linalg.inv(peg_end_transform) @ hole_transform
 
-        # TODO: joint positions
+        # extract position and orientation of hole w.r.t. peg
+        hole_wrt_peg_pos = hole_wrt_peg_transform[:3,3]
+        hole_wrt_peg_rot = hole_wrt_peg_transform[:3,:3] # rotation matrix
+        hole_wrt_peg_quat = mat2quat(hole_wrt_peg_rot) # format: xyzw
+
+        print("hole_wrt_peg_pos = ", hole_wrt_peg_pos)
+        print("hole_wrt_peg_quat = ", hole_wrt_peg_quat)
+
+        ## joint positions
         joint_pos = self._physics.data.qpos.copy()
         print("joint pos = ",joint_pos)
-        return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pose,joint_pos))
+        return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pos,hole_wrt_peg_quat,joint_pos))
 
     def _get_info(self) -> dict:
         # TODO come up with an info dict that makes sense for your RL task
@@ -244,11 +237,13 @@ class UR3ePegInHoleEnv(gym.Env):
             # update physics with the randomized position
             self._physics.forward()
 
-            # store the randomized position of the hole (for observation)
+            # store the randomized position and orientation of the hole (for observation)
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
             print("hole pos after reset = ", self._hole_pos)
             self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
             self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
+            self._hole_rot = self._physics.bind(self._hole_frame).xmat.copy()
+            self._hole_rot = self._hole_rot.reshape(3,3)
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
@@ -318,7 +313,7 @@ class UR3ePegInHoleEnv(gym.Env):
             truncated = True
         
         # get observation
-        observation = self._get_obs() # return [Fx, Fy, Fz, Mx, My, Mz, dx, dy, dz]
+        observation = self._get_obs()
 
         ## Reward function
         reward, terminated, reward_list = self._get_reward(observation,action)
