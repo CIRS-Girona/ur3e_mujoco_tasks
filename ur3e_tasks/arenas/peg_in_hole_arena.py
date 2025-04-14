@@ -9,7 +9,7 @@ class PegInHoleArena(object):
 
         xml_path= os.path.join(
                 os.path.dirname(__file__),
-                '../assets/peg-in-hole/peg_in_hole_stl.xml',
+                '../assets/peg-in-hole/peg_in_hole.xml',
             )
 
         self._mjcf_model = mjcf.from_path(xml_path)
