@@ -16,8 +16,6 @@ import cv2
 
 from ur3e_tasks.controllers import EEFVelocityController
 from ur3e_tasks.utils import DomainRandomizer
-from manipulator_mujoco.utils.mujoco_utils import get_site_jac
-from manipulator_mujoco.utils.controller_utils import pose_error
 from manipulator_mujoco.utils.transform_utils import mat2quat
 
 class UR3ePegInHoleEnv(gym.Env):
@@ -159,28 +157,9 @@ class UR3ePegInHoleEnv(gym.Env):
     def _get_obs(self) -> np.ndarray:
         ## end-effector force-torque
         sensor_force = self._physics.data.sensor('ur3e/ee_force').data.copy()
-        print("sensor_force = ", sensor_force)
+        # print("sensor_force = ", sensor_force)
         sensor_torque = self._physics.data.sensor('ur3e/ee_torque').data.copy()
-        print("sensor_torque = ", sensor_torque)
-
-        ########################################################
-        # # position of the hole w.r.t. peg
-        # peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
-        # # NOTE: should I define peg_pos from the joints instead of directly from sim data?
-        # # hole_wrt_peg_pos = self._hole_pos - peg_end_pos
-
-        # # orientation of the hole w.r.t. peg
-        # peg_end_quat = self._physics.bind(self._peg_end).xquat.copy()
-        # peg_end_quat_xyzw = [peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]]
-        # # print("peg end quat = ", peg_end_quat)
-        # # hole_wrt_peg_quat = orientation_error(quat2mat(self._hole_quat), quat2mat(peg_end_quat))
-
-        # ## alternative: directly calculate pose difference
-        # peg_end_pose = np.concatenate((peg_end_pos,peg_end_quat_xyzw))
-        # hole_frame_pose = np.concatenate((self._hole_pos, self._hole_quat_xyzw))
-        # hole_wrt_peg_pose = pose_error(hole_frame_pose,peg_end_pose)
-        # print("hole_wrt_peg_pose = ", hole_wrt_peg_pose)
-        ############################################################################
+        # print("sensor_torque = ", sensor_torque)
         
         ## position and orientation of hole w.r.t. peg
         # position and orientation of peg tip w.r.t. world
@@ -200,12 +179,12 @@ class UR3ePegInHoleEnv(gym.Env):
         hole_wrt_peg_rot = hole_wrt_peg_transform[:3,:3] # rotation matrix
         hole_wrt_peg_quat = mat2quat(hole_wrt_peg_rot) # format: xyzw
 
-        print("hole_wrt_peg_pos = ", hole_wrt_peg_pos)
-        print("hole_wrt_peg_quat = ", hole_wrt_peg_quat)
+        # print("hole_wrt_peg_pos = ", hole_wrt_peg_pos)
+        # print("hole_wrt_peg_quat = ", hole_wrt_peg_quat)
 
         ## joint positions
         joint_pos = self._physics.data.qpos.copy()
-        print("joint pos = ",joint_pos)
+        # print("joint pos = ",joint_pos)
         return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pos,hole_wrt_peg_quat,joint_pos))
 
     def _get_info(self) -> dict:
@@ -238,11 +217,13 @@ class UR3ePegInHoleEnv(gym.Env):
             self._physics.forward()
 
             # store the randomized position and orientation of the hole (for observation)
-            self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
-            self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
-            self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
+            self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy() 
             self._hole_rot = self._physics.bind(self._hole_frame).xmat.copy()
             self._hole_rot = self._hole_rot.reshape(3,3)
+
+            # NECESSARY FOR TESTING WITH POSITION CONTROLLER
+            # self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
+            # self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
@@ -285,7 +266,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         ###########################################
         # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
-        # # peg in hole testing logic
+        # peg in hole testing logic
         # if self.i < 500:
         #     pass
         # elif self.i < 2500:
@@ -405,15 +386,15 @@ class UR3ePegInHoleEnv(gym.Env):
         ## Reward function
         # reward based on distance
         reward_dist = self.map_reward(observation[6:9],self.max_dist)
-        print("reward_dist = ",reward_dist)
+        # print("reward_dist = ",reward_dist)
 
         # reward based on magnitude of action taken
         reward_act = self.map_reward(action,self.act_limit)
-        print("reward_act = ",reward_act)
+        # print("reward_act = ",reward_act)
 
         # reward based on contact force
         reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
-        print("reward_force = ",reward_force)
+        # print("reward_force = ",reward_force)
 
         reward_list = [reward_dist,reward_act,reward_force]
 
@@ -485,7 +466,6 @@ class UR3ePegInHoleEnv(gym.Env):
             Returns:
                 twist expressed in world frame.
         '''
-        print(f"twist_b = {twist_b}")
         # adjoint matrix
         R = self._peg_end_rot
         p = self._peg_end_pos
@@ -495,5 +475,4 @@ class UR3ePegInHoleEnv(gym.Env):
         A = np.block([[R, np.zeros((3,3))],[np.zeros((3,3)),R]])
         
         twist_w = A @ twist_b.reshape(-1,1)
-        print(f"twist_w = {twist_w.reshape(-1)}")
         return twist_w.reshape(-1)
