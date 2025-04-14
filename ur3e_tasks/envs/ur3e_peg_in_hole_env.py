@@ -116,29 +116,29 @@ class UR3ePegInHoleEnv(gym.Env):
         self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
         # set up controller
-        # self._controller = EEFVelocityController(
-        #     physics=self._physics,
-        #     joints=self._arm.joints,
-        #     eef_site=self._arm.eef_site,
-        #     min_effort=-150.0,
-        #     max_effort=25.0,
-        #     kv=150 # TODO: tune this parameter
-        # )
-
-        ###########################################
-        # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
-        self._controller = OperationalSpaceController(
+        self._controller = EEFVelocityController(
             physics=self._physics,
             joints=self._arm.joints,
             eef_site=self._arm.eef_site,
             min_effort=-150.0,
-            max_effort=150.0,
-            kp=200,
-            ko=200,
-            kv=50,
-            vmax_xyz=0.2,
-            vmax_abg=0.5,
+            max_effort=25.0,
+            kv=150 # TODO: tune this parameter
         )
+
+        ###########################################
+        # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
+        # self._controller = OperationalSpaceController(
+        #     physics=self._physics,
+        #     joints=self._arm.joints,
+        #     eef_site=self._arm.eef_site,
+        #     min_effort=-150.0,
+        #     max_effort=150.0,
+        #     kp=200,
+        #     ko=200,
+        #     kv=50,
+        #     vmax_xyz=0.2,
+        #     vmax_abg=0.5,
+        # )
         ###########################################
 
         # for GUI and time keeping
@@ -184,10 +184,10 @@ class UR3ePegInHoleEnv(gym.Env):
         
         ## position and orientation of hole w.r.t. peg
         # position and orientation of peg tip w.r.t. world
-        peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
+        self._peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
         peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
-        peg_end_rot = peg_end_rot.reshape(3,3)
-        peg_end_transform = np.block([[peg_end_rot,peg_end_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
+        self._peg_end_rot = peg_end_rot.reshape(3,3)
+        peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
 
         # position and orientation of hole w.r.t. world
         hole_transform = np.block([[self._hole_rot,self._hole_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
@@ -239,7 +239,6 @@ class UR3ePegInHoleEnv(gym.Env):
 
             # store the randomized position and orientation of the hole (for observation)
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
-            print("hole pos after reset = ", self._hole_pos)
             self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
             self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
             self._hole_rot = self._physics.bind(self._hole_frame).xmat.copy()
@@ -248,15 +247,20 @@ class UR3ePegInHoleEnv(gym.Env):
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
 
+            # store initial peg end position and orientation
+            self._peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
+            peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
+            self._peg_end_rot = peg_end_rot.reshape(3,3)
+
             ###########################################
             # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
             # put target in a reasonable starting position
-            target_pos = self._hole_pos.copy()
-            R_world_to_hole = self._physics.bind(self._hole_frame).xmat.reshape(3,3)
-            offset = R_world_to_hole @ np.array([0,0,0.2]).T
-            print("offset = ",offset)
-            target_pos += offset
-            self._target.set_mocap_pose(self._physics, position=target_pos[:3], quaternion=self._hole_quat_xyzw.copy())
+            # target_pos = self._hole_pos.copy()
+            # R_world_to_hole = self._physics.bind(self._hole_frame).xmat.reshape(3,3)
+            # offset = R_world_to_hole @ np.array([0,0,0.2]).T
+            # print("offset = ",offset)
+            # target_pos += offset
+            # self._target.set_mocap_pose(self._physics, position=target_pos[:3], quaternion=self._hole_quat_xyzw.copy())
             ############################################
 
 
@@ -275,31 +279,34 @@ class UR3ePegInHoleEnv(gym.Env):
         truncated = False
 
         # execute action
-        # action = [vx, vy, vz, wx, wy]
+        # action = [vx, vy, vz, wx, wy] in end-effector frame
         # append wz=0 before passing to controller
-        target_vel = np.concatenate((action,[0]))
+        target_vel_ee = np.concatenate((action,[0]))
 
         ###########################################
         # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
-        # peg in hole testing logic
-        if self.i < 500:
-            pass
-        elif self.i < 2500:
-            hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
-            hole_pos[2] = hole_pos[2]
-            target_quat = [self._hole_quat.copy()[1], self._hole_quat.copy()[2], self._hole_quat.copy()[3], self._hole_quat.copy()[0]]
-            self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=target_quat)
-        else:
-            terminated = True
+        # # peg in hole testing logic
+        # if self.i < 500:
+        #     pass
+        # elif self.i < 2500:
+        #     hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
+        #     hole_pos[2] = hole_pos[2]
+        #     target_quat = [self._hole_quat.copy()[1], self._hole_quat.copy()[2], self._hole_quat.copy()[3], self._hole_quat.copy()[0]]
+        #     self._target.set_mocap_pose(self._physics, position=hole_pos[:3], quaternion=target_quat)
+        # else:
+        #     terminated = True
 
-        # set target for ee
-        target_pose = self._target.get_mocap_pose(self._physics)
+        # # set target for ee
+        # target_pose = self._target.get_mocap_pose(self._physics)
         ###########################################
+
+        # convert target vel to world frame
+        target_vel = self.convert_twist_to_world(target_vel_ee)
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
         for _ in range(10):
-            self._controller.run(target_pose) # CHANGE TO target_vel TO USE VELOCITY CONTROLLER
+            self._controller.run(target_vel) # CHANGE TO target_vel TO USE VELOCITY CONTROLLER
             # step physics
             self._physics.step()
             #time.sleep(0.01)
@@ -469,3 +476,24 @@ class UR3ePegInHoleEnv(gym.Env):
         joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
 
         return ee_safety_violation or joint_safety_violation
+    
+    def convert_twist_to_world(self,twist_b):
+        '''
+            Convert twist from peg frame to world frame.
+            Arguments:
+                twist_b: (ndarray) twist in peg frame.
+            Returns:
+                twist expressed in world frame.
+        '''
+        print(f"twist_b = {twist_b}")
+        # adjoint matrix
+        R = self._peg_end_rot
+        p = self._peg_end_pos
+        p_ss = np.array([[0,-p[2],p[1]],
+                         [p[2],0,-p[0]],
+                         [-p[1],p[0],0]])
+        A = np.block([[R, np.zeros((3,3))],[np.zeros((3,3)),R]])
+        
+        twist_w = A @ twist_b.reshape(-1,1)
+        print(f"twist_w = {twist_w.reshape(-1)}")
+        return twist_w.reshape(-1)
