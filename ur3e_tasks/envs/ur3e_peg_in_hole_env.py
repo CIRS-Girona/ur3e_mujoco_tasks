@@ -147,12 +147,11 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # more attributes related to rewards computation
         # TODO: tune these values
-        self.reward_weights = [1.0,0.05,0.4] # [distance, action, force]
+        self.reward_weights = [1.0,0.01,0.05] # [distance, action, force]
         self.dist_threshold = 0.01 # must be very small to make sure the peg is inserted to the hole
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
         self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
 
-        self.max_timestep = 2500
 
     def _get_obs(self) -> np.ndarray:
         ## end-effector force-torque
@@ -257,7 +256,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # flags
         self.i = self.i + 1
         terminated = False
-        truncated = False
+        truncated = False # always false; will be taken care by the `TimeLimit` wrapper added during `make`
 
         # execute action
         # action = [vx, vy, vz, wx, wy] in end-effector frame
@@ -296,9 +295,6 @@ class UR3ePegInHoleEnv(gym.Env):
                 self._render_frame()
 
         print("i = ", self.i)
-
-        if self.i == self.max_timestep:
-            truncated = True
         
         # get observation
         observation = self._get_obs()
@@ -412,7 +408,7 @@ class UR3ePegInHoleEnv(gym.Env):
             reward = 100
             terminated = True
         elif safety_violation:
-            reward = -100
+            reward = -10
             terminated = True
         else:
             reward = np.dot(self.reward_weights,reward_list) # weighted combination
