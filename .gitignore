@@ -1,5 +1,5 @@
 *.pyc
 __pycache__/
 ur3e_tasks.egg-info/*
-*.zip
 log/
+models/

@@ -22,17 +22,21 @@ def parse_arguments():
     # Define arguments
     parser.add_argument('--algorithm', type=str, required=True, help='The algorithm to use (SAC, TD3)')
     parser.add_argument('--save-filename', type=str, required=True, help='The name of the file to save the model to')
+    parser.add_argument('--render', action='store_true', help='Enable renderring.')
     parser.add_argument('--enable-log', action='store_true', help='Enable logging.')
 
     # Parse arguments
     args = parser.parse_args()
 
-    return args.algorithm, args.save_filename, args.enable_log
+    return args.algorithm, args.save_filename, args.render, args.enable_log
 
 def main():
-    algorithm, filename, logging = parse_arguments()
+    algorithm, filename, render, logging = parse_arguments()
+
+    render_mode = 'human' if render else None
+
     # Create the environment with rendering in human mode
-    env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
+    env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode=render_mode)
 
     # check_env(env)
 
@@ -42,6 +46,7 @@ def main():
     SAVE_DIR = Path(__file__).parent /'..' / 'models'
     # Make sure the directory exists
     os.makedirs(SAVE_DIR, exist_ok=True)
+    save_path = os.path.join(SAVE_DIR,filename)
 
     if logging:
         # directory for logging
@@ -59,8 +64,9 @@ def main():
         raise "Algorithm is not valid!"
 
     model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=LOG_DIR)
-    model.learn(total_timesteps=5000, log_interval=4, tb_log_name=filename)
-    model.save(os.path.join(SAVE_DIR,filename))
+    model.learn(total_timesteps=15000, log_interval=4, tb_log_name=filename)
+    model.save(save_path)
+    print(f"Model saved in {os.path.abspath(save_path)}")
 
 if __name__ == "__main__":
     main()

@@ -38,6 +38,7 @@ def main():
     FILE_DIR = Path(__file__).parent /'..' / 'models'
     # Make sure the directory exists
     os.makedirs(FILE_DIR, exist_ok=True)
+    file_path = os.path.join(FILE_DIR,filename)
 
     # instantiate and train model
     if algorithm == 'SAC':
@@ -50,7 +51,8 @@ def main():
     ## Testing
 
     try:
-        model = alg_func.load(os.path.join(FILE_DIR,filename))
+        print(f"Loading model from {os.path.abspath(file_path)} ...")
+        model = alg_func.load(file_path)
     except:
         raise "Error loading model!"
 
