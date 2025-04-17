@@ -147,10 +147,17 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # more attributes related to rewards computation
         # TODO: tune these values
-        self.reward_weights = [1.0,0.01,0.05] # [distance, action, force]
+        self.reward_weights = [1.5,0.01,0.05] # [distance, action, force]
         self.dist_threshold = 0.01 # must be very small to make sure the peg is inserted to the hole
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
-        self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
+        # self.joint_torque_limits = [54.0,54.0,28.0,9.0,9.0,9.0]
+
+        self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
+        self._base_position = self._physics.bind(self._base_id).xpos.copy()
+        
+        joint_pos_limits = self._physics.model.jnt_range.copy()
+        self._joint_pos_lower_limits = joint_pos_limits[:,0]
+        self._joint_pos_upper_limits = joint_pos_limits[:,-1]
 
 
     def _get_obs(self) -> np.ndarray:
@@ -183,7 +190,23 @@ class UR3ePegInHoleEnv(gym.Env):
 
         ## joint positions
         joint_pos = self._physics.data.qpos.copy()
-        # print("joint pos = ",joint_pos)
+        print("joint pos = ",joint_pos)
+        # joint_limits = self._physics.model.jnt_range.copy()
+        # # for joint_limit in joint_limits:
+        # joint_lower_limits = joint_limits[:,0]
+        # joint_upper_limits = joint_limits[:,-1]
+
+        # print(f"joint lower limits = {joint_lower_limits}")
+        # print(f"joint upper limits = {joint_upper_limits}")
+
+        # joint_limit_violation = np.any(joint_pos <= joint_lower_limits) or np.any(joint_pos >= joint_upper_limits)
+        # print(f"joint limit violation? {joint_limit_violation}")
+
+        # base_id = self._arena.mjcf_model.find('body','ur3e/base')
+        # base_position = self._physics.bind(base_id).xpos.copy()
+        # print(f"base_position = {base_position}")
+        # peg_range = np.linalg.norm(base_position-self._peg_end_pos)
+        # print(f"peg_range = {peg_range}")
         return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pos,hole_wrt_peg_quat,joint_pos))
 
     def _get_info(self) -> dict:
@@ -206,14 +229,14 @@ class UR3ePegInHoleEnv(gym.Env):
             ]
 
             # randomize hole position and orientation
-            rand_pos = self._randomizer.get_random_ws_pos()
-            self._physics.bind(self._hole).mocap_pos[:] = rand_pos
+            # rand_pos = self._randomizer.get_random_ws_pos()
+            # self._physics.bind(self._hole).mocap_pos[:] = rand_pos
 
-            rand_quat = self._randomizer.get_random_quat(self._hole_quat_default)
-            self._physics.bind(self._hole).mocap_quat[:] = rand_quat
+            # rand_quat = self._randomizer.get_random_quat(self._hole_quat_default)
+            # self._physics.bind(self._hole).mocap_quat[:] = rand_quat
 
             # update physics with the randomized position
-            self._physics.forward()
+            # self._physics.forward()
 
             # store the randomized position and orientation of the hole (for observation)
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy() 
@@ -266,7 +289,7 @@ class UR3ePegInHoleEnv(gym.Env):
         ###########################################
         # UNCOMMENT THIS PART TO TEST WITH POSITION CONTROLLER
         # peg in hole testing logic
-        # if self.i < 500:
+        # if self.i < 300:
         #     pass
         # elif self.i < 2500:
         #     hole_pos = self._physics.bind(self._hole_frame).xpos.copy()
@@ -276,7 +299,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # else:
         #     terminated = True
 
-        # # set target for ee
+        # # # set target for ee
         # target_pose = self._target.get_mocap_pose(self._physics)
         ###########################################
 
@@ -285,7 +308,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
-        for _ in range(10):
+        for _ in range(20):
             self._controller.run(target_vel) # CHANGE TO target_vel TO USE VELOCITY CONTROLLER
             # step physics
             self._physics.step()
@@ -302,14 +325,18 @@ class UR3ePegInHoleEnv(gym.Env):
         ## Reward function
         reward, terminated, reward_list = self._get_reward(observation,action)
 
+        # print(f"action = {action}")
+        # print(f"observation = {observation}")
+        # print(f"reward = {reward}")
+
         # info = self._get_info()
         
         info = {
             "forces":observation[:3],
             "torques":observation[3:6],
             "distance_to_hole":observation[6:9],
-            "orientation_difference":observation[9:12],
-            "joint_pos":observation[12:],
+            "orientation_difference":observation[9:13],
+            "joint_pos":observation[13:],
             "reward_distance": reward_list[0],
             "reward_action": reward_list[1],
             "reward_force": reward_list[2],
@@ -401,7 +428,7 @@ class UR3ePegInHoleEnv(gym.Env):
         task_completed = np.linalg.norm(observation[6:9]) < self.dist_threshold
 
         # safety violation occurs if any of the detected forces and torques exceeds the limit
-        safety_violation = self.check_safety_violation(observation[:6])
+        safety_violation = self.check_safety_violation(observation[:6], observation[-6:])
 
         # assign reward and flags
         if task_completed:
@@ -433,7 +460,7 @@ class UR3ePegInHoleEnv(gym.Env):
         reward = - np.linalg.norm(vec/max)
         return reward
     
-    def check_safety_violation(self,ee_force_torque):
+    def check_safety_violation(self,ee_force_torque,joint_pos):
         '''
             Returns True if safety violation occurs.
             Safety violation is defined by one of these conditions:
@@ -443,16 +470,21 @@ class UR3ePegInHoleEnv(gym.Env):
         # end-effector force-torque
         ee_safety_violation = np.any(np.abs(ee_force_torque) >= self.obs_limit[:6])
 
-        # extract joint torques
-        qfrc_bias = self._physics.data.qfrc_bias
-        qfrc_passive = self._physics.data.qfrc_passive
-        qfrc_applied = self._physics.data.qfrc_applied
+        # # extract joint torques
+        # qfrc_bias = self._physics.data.qfrc_bias
+        # qfrc_passive = self._physics.data.qfrc_passive
+        # qfrc_applied = self._physics.data.qfrc_applied
 
-        total_joint_torques = qfrc_bias + qfrc_passive + qfrc_applied
+        # total_joint_torques = qfrc_bias + qfrc_passive + qfrc_applied
+        # print(f"total joint torques = {total_joint_torques}")        
 
-        joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
+        # joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
+        joint_limit_violation = np.any(joint_pos <= self._joint_pos_lower_limits) or np.any(joint_pos >= self._joint_pos_upper_limits)
 
-        return ee_safety_violation or joint_safety_violation
+        peg_range = np.linalg.norm(self._base_position-self._peg_end_pos)
+        range_violation = peg_range >= 0.5
+
+        return ee_safety_violation or joint_limit_violation or range_violation
     
     def convert_twist_to_world(self,twist_b):
         '''
