@@ -19,7 +19,7 @@ from ur3e_tasks.robots import Camera
 import cv2
 from PIL import Image
 from manipulator_mujoco.utils.transform_utils import (
-    mat2quat,
+    mat2quat, quat2mat
 )
 import torch
 class UR3eAssemblyEnv(gym.Env):
@@ -44,9 +44,9 @@ class UR3eAssemblyEnv(gym.Env):
         self._model = None
         self.obs_list = []
         self.frame_hist = 3
-        self.frames_skipped = 5
+        self.frames_skipped = 500
         self.frames_buffer = []
-
+        self.pred_vel, self.pred_pose, self.pred_state = np.zeros(6), np.zeros(7), 0
 
 
         assert render_mode is None or render_mode in self.metadata["render_modes"]
@@ -161,7 +161,7 @@ class UR3eAssemblyEnv(gym.Env):
         joints: np.array
         }
         """
-        if self.i % 100 == 0:
+        if self.i % 2 == 0:
             # prepare data
             # get ee pose respect to base
             base = self._arena.mjcf_model.find('body', "ur3e/base")
@@ -234,37 +234,39 @@ class UR3eAssemblyEnv(gym.Env):
             if self.random_once == True:
                 self.random_domain = False
         else: 
-            # just to setup some variable
-            hole_pos = self._randomizer.random_object_in_ws("hole")
-            self._randomizer.random_texture("table_top")
-            self._randomizer.random_texture("wall_left")
-            self._randomizer.random_texture("wall_right")
-            self._randomizer.random_texture("wall_back")
-            self._randomizer.random_texture("wall_front")
-            self._randomizer.random_light("light_source")
-            self._randomizer.random_object_color("hole")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
-            self._randomizer.random_arm_height("ur3e/base")
-            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
-            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
-            self._randomizer.random_distractors()
-            self._randomizer.random_texture_arm(self._arm)
-            init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             if self._random_state is not None:
+                # just to setup some variable
+                hole_pos = self._randomizer.random_object_in_ws("hole")
+                self._randomizer.random_texture("table_top")
+                self._randomizer.random_texture("wall_left")
+                self._randomizer.random_texture("wall_right")
+                self._randomizer.random_texture("wall_back")
+                self._randomizer.random_texture("wall_front")
+                self._randomizer.random_light("light_source")
+                self._randomizer.random_object_color("hole")
+                self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+                self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+                self._randomizer.random_arm_height("ur3e/base")
+                self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+                self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+                self._randomizer.random_distractors()
+                self._randomizer.random_texture_arm(self._arm)
+                init_pose = self._randomizer.random_initial_position(hole_pos.copy())
+                
                 self._randomizer.apply_random_state(self._random_state )
                 init_pose = self._random_state["initial_pose"]
-        
+            
         # recomplie model
         self.complie_model()
 
         # # find initial arm position
         # init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
         # init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
-        print("Init Pose: {}".format(init_pose))
-        # time.sleep(50)
-        self._target.set_mocap_pose(self._physics, position=init_pose[:3], quaternion=init_pose[3:])
-        target_pose = self._target.get_mocap_pose(self._physics)
+        if self.random_domain:
+            print("Init Pose: {}".format(init_pose))
+            # time.sleep(50)
+            self._target.set_mocap_pose(self._physics, position=init_pose[:3], quaternion=init_pose[3:])
+            target_pose = self._target.get_mocap_pose(self._physics)
         
         # reset physics
         with self._physics.reset_context():
@@ -282,12 +284,13 @@ class UR3eAssemblyEnv(gym.Env):
                 
 
                 # random initial position
-                vel_cmd = self._controller.cal_vel_from_target(target_pose)
-                self._controller.run(vel_cmd)
+                if self.random_domain:
+                    vel_cmd = self._controller.cal_vel_from_target(target_pose,2,3)
+                    self._controller.run(vel_cmd)
 
-                self._physics.step()
-                if self._render_mode == "human":
-                    self._render_frame()
+                    self._physics.step()
+                # if self._render_mode == "human":
+                #     self._render_frame()
           
 
         
@@ -332,7 +335,8 @@ class UR3eAssemblyEnv(gym.Env):
         self._controller.run(action)
 
         # step physics
-        self._physics.step()
+        for i in range(1):
+            self._physics.step()
         # time.sleep(0.01)
 
         # render frame
@@ -512,19 +516,29 @@ class UR3eAssemblyEnv(gym.Env):
         return vel_cmd
     
     def get_action_model(self,obs):
-        stacked_obs = self.stack_obs(obs)
-        front_im = stacked_obs["front"]
-        side_im = stacked_obs["side"]
-        hand_im = stacked_obs["hand"]
-        ee_pose = stacked_obs["ee_pose"]
-        joint_state = stacked_obs["joints"]
-        with torch.no_grad():  # Disable gradient calculation for inference
-            vel, pose, est_state = self._model(front_im, side_im, hand_im, ee_pose, joint_state)
+        start_time  = time.time()
+        stacked_obs = self.update_obs(obs)
+        if self.i % 300 == 0:
+            stacked_obs = self.stack_obs()
+            front_im = stacked_obs["front"]
+            side_im = stacked_obs["side"]
+            hand_im = stacked_obs["hand"]
+            ee_pose = stacked_obs["ee_pose"]
+            joint_state = stacked_obs["joints"]
+            with torch.no_grad():  # Disable gradient calculation for inference
+                vel, hole_pose, est_state = self._model(front_im, side_im, hand_im, ee_pose, joint_state)
 
+            base = self._arena.mjcf_model.find('body', "ur3e/base")
+            hole_pose_w = self.pose_in_world(np.array(hole_pose).reshape(7),base)
+
+            self._target.set_mocap_pose(self._physics, position=hole_pose_w[:3], quaternion=hole_pose_w [3:])
         # print(np.array(vel).reshape(6))
-        return np.array(vel).reshape(6), np.array(pose).reshape(7), torch.argmax(est_state)
+            self.pred_vel, self.pred_pose, self.pred_state = np.array(vel).reshape(6), np.array(hole_pose).reshape(7), torch.argmax(est_state)
+        print("Inference time: {}".format(time.time()-start_time))
+
+        return self.pred_vel, self.pred_pose, self.pred_state
     
-    def stack_obs(self,new_obs):
+    def update_obs(self,new_obs):
         buffer_length = self.frames_skipped * self.frame_hist
         # for first frame 
         if len(self.frames_buffer) == 0:
@@ -540,6 +554,12 @@ class UR3eAssemblyEnv(gym.Env):
         self.obs_list[0] = self.frames_buffer[-1 - self.frames_skipped*2]
         
         
+        
+
+
+    def stack_obs(self):
+        start_time  = time.time()
+
         # Prepare stacked observations for the model (3 frames per channel + state info)
         front_images = []
         side_images = []
@@ -555,7 +575,14 @@ class UR3eAssemblyEnv(gym.Env):
             hand_images.append(obs['frame3'])  # Frame 3
             ee_pose.append(obs['ee_pose'])  # ee_pose
             joints.append(obs['joints'])  # joints
-        
+    
+        # front_images.reverse()
+        # side_images.reverse()
+        # hand_images.reverse()
+        # ee_pose.reverse()
+        # joints.reverse()
+
+   
         # Convert lists to tensors (assuming images are torch tensors)
         front_images = torch.tensor(np.stack([
             front_images[0], front_images[1], front_images[2]
@@ -588,8 +615,9 @@ class UR3eAssemblyEnv(gym.Env):
             'joints': joints.unsqueeze(0)           # Shape (3 x 6)
         }
 
-        self.visualize_obs(stacked_obs)
-            
+        # self.visualize_obs(stacked_obs)
+        
+
         
         return stacked_obs
 
@@ -630,6 +658,33 @@ class UR3eAssemblyEnv(gym.Env):
         # print("EE pos2: {}".format(pose))
 
         return target_pose
+    
+    def pose_in_world(self,target,base):
+        """
+        find target pose respect to the base 
+        """
+
+        # extract pose form input 
+        target_pos = target[:3]
+        target_rot = quat2mat(target[3:])
+
+        base_pos = self._physics.bind(base).xpos
+        base_rot = self._physics.bind(base).xmat.reshape(3, 3)
+
+
+
+        
+
+        
+
+        # test
+        position = base_rot @ target_pos + base_pos
+        mat = base_rot @ target_rot
+        quat = mat2quat(mat)
+        pose = np.concatenate([position,quat])
+        print("EE pos2: {}".format(pose))
+
+        return pose
     
     def prepare_image(self, img):
         """

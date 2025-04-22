@@ -1,6 +1,6 @@
 <mujoco model="assembly_scene">
   <compiler angle="radian" />
-  <option timestep="0.001"/>
+  <option timestep="0.002"/>
   <include file="assembly_hole/assembly_hole.xml"/>
   <!-- <include file="assembly_peg/assembly_peg.xml"/> -->
   <visual>
@@ -18,10 +18,10 @@
   <asset>
     <texture type="skybox" builtin="gradient" rgb1="0.3 0.5 0.7" rgb2="0 0 0" width="512" height="3072"/>
     <texture type="2d" name="groundplane" builtin="checker" mark="edge" rgb1="0.2 0.3 0.4" rgb2="0.1 0.2 0.3" markrgb="0.8 0.8 0.8" width="300" height="300"/>
-    <texture type="cube" name="random" file="/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images/chequered/chequered_0017.png"/>
+    <!-- <texture type="cube" name="random" file="/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images/chequered/chequered_0017.png"/> -->
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
     <material name="grid" texture="chequered" texrepeat="5 5" reflectance="0.2"/>
-    <material name="random" texture="random"/>
+    <!-- <material name="random" texture="random"/> -->
     <material name="Wood" rgba="0.6 0.4 0.2 1.0"/>
     <texture name="chequered" type="2d" builtin="checker" width="300" height="300" 
              rgb1="0.2 0.3 0.4" rgb2="0.3 0.4 0.5"/>
@@ -61,7 +61,7 @@
     </body>
     
     <body name="workspace_center" euler="0  0.0  0" pos="0.0 0.0 1.0"></body>
-    <body name="camera_center1" euler="0  0.0  0" pos="0.5 0.0 1.0"></body>
+    <body name="camera_center1" euler="0  0.0  0" pos="0.4 0.0 1.0"></body>
     <body name="camera_center2" euler="0  0.0  0" pos="0.5 0.0 1.0"></body>
 
     <body name="fixed_camera1" euler="0  0  0" pos="1.0 0.0 1.8">

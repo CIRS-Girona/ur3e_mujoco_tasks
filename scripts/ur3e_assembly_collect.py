@@ -12,7 +12,7 @@ import pickle
 import zipfile
 import time
 
-def collect(data_list, episode, output_dir="/home/tanakrit-ubuntu/ur3e_mujoco_tasks/scripts/data", timestamp=None, metadata=None):
+def collect(data_list, episode, output_dir="/home/students/ur3e_mujoco_tasks/data/data_near", timestamp=None, metadata=None):
     """
     Saves images and metadata from the observation, action, and info, then compresses the files.
 
@@ -121,6 +121,10 @@ while True:
         data_list = []
         start_collect = False
         collect_step = -1
+
+        if episode > 2000:
+            env.close()
+            exit()
 
 # Close the environment when the simulation is done
 env.close()

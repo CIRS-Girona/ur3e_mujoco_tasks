@@ -6,7 +6,7 @@ import copy
 from scipy.spatial.transform import Rotation as R
 
 class DomainRandomizer:
-    def __init__(self, model,arm, texture_dir = "/home/tanakrit-ubuntu/dtd-r1.0.1/dtd/images",seed=None):
+    def __init__(self, model,arm, texture_dir = "/home/students/dtd-r1.0.1/dtd/images",seed=None):
         if seed:
             np.random.seed(seed)
         self._model = model
@@ -323,7 +323,7 @@ class DomainRandomizer:
     ## 8. Random Initial postion 
     ############################################################
     def random_initial_position(self,hole_pose):
-        init_pos = self.get_random_ws_pos_clearance(hole_pose, 0.3)
+        init_pos = self.get_random_ws_pos_clearance(hole_pose, 0.08,upper=0.4)
         init_quat = self.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
         init_pose = np.concatenate([init_pos,init_quat]).reshape(7)
 
@@ -394,12 +394,12 @@ class DomainRandomizer:
         pos = [x,y,z]
         return pos
     
-    def get_random_ws_pos_clearance(self, object_pos, clearance):    
+    def get_random_ws_pos_clearance(self, object_pos, clearance, upper=99999):    
         default_pos = [0.2, 0.0, 1.1]
         for i in range(1000):
             ran_pos = self.get_random_ws_pos(height=0.2)
             distance_to_object = np.linalg.norm(np.array(ran_pos) - np.array(object_pos))
-            if distance_to_object > clearance:
+            if distance_to_object > clearance and distance_to_object < upper:
                 return ran_pos
 
         return default_pos

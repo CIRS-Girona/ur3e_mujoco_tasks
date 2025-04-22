@@ -158,11 +158,14 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
-        self.vel_lim = 1
-        self.ang_vel_lim = 10
+        self.vel_lim = 0.1
+        self.ang_vel_lim = 0.35
 
         self.offset = 0.1
-        self.max_counter = 4000/self.blackboard.update_period
+        self.max_counter = 10000/self.blackboard.update_period
+
+        self.close_counter = 0
+        self.close_threshold = 50
 
     def setup(self):
         self.logger.debug("  %s [MoveToHole::setup()]" % self.name)
@@ -190,9 +193,15 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pose, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose):
-            self.logger.debug("MoveToHole SUCCESS!!!")
-            return py_trees.common.Status.SUCCESS
+        if are_close(self.hole_pose,eef_pose) :
+            if self.close_counter >=self.close_threshold:
+                self.close_counter = 0
+                self.logger.debug("MoveToHole SUCCESS!!!")
+                return py_trees.common.Status.SUCCESS
+            else:
+                self.close_counter = self.close_counter +1
+                self.logger.debug("MoveToHole Alomost SUCCESS!!!")
+                return py_trees.common.Status.RUNNING
         else:
             self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
@@ -219,11 +228,11 @@ class Assemble(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
-        self.vel_lim = 0.05
+        self.vel_lim = 0.035
         self.ang_vel_lim = 0.2
 
         self.offset = 0.0
-        self.max_counter = 4000/self.blackboard.update_period
+        self.max_counter = 8000/self.blackboard.update_period
 
     def setup(self):
         self.logger.debug("  %s [Assemble::setup()]" % self.name)
