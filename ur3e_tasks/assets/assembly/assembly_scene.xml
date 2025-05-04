@@ -22,7 +22,8 @@
     <material name="groundplane" texture="groundplane" texuniform="true" texrepeat="5 5" reflectance="0.2"/>
     <material name="grid" texture="chequered" texrepeat="5 5" reflectance="0.2"/>
     <!-- <material name="random" texture="random"/> -->
-    <material name="Wood" rgba="0.6 0.4 0.2 1.0"/>
+    <material name="Wood" rgba="0.1 0.9 0.1 1.0"/> 
+    <!-- 0.6 0.4 0.2 1.0 -->
     <texture name="chequered" type="2d" builtin="checker" width="300" height="300" 
              rgb1="0.2 0.3 0.4" rgb2="0.3 0.4 0.5"/>
   </asset>

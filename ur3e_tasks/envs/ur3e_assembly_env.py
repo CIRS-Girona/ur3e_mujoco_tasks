@@ -216,20 +216,20 @@ class UR3eAssemblyEnv(gym.Env):
         # domain randomize
         if self.random_domain:
             hole_pos = self._randomizer.random_object_in_ws("hole")
-            # self._randomizer.random_texture("table_top")
-            # self._randomizer.random_texture("wall_left")
-            # self._randomizer.random_texture("wall_right")
-            # self._randomizer.random_texture("wall_back")
-            # self._randomizer.random_texture("wall_front")
-            # self._randomizer.random_light("light_source")
-            # self._randomizer.random_object_color("hole")
-            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
-            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
-            # self._randomizer.random_arm_height("ur3e/base")
-            # self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
-            # self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
-            # self._randomizer.random_distractors()
-            # self._randomizer.random_texture_arm(self._arm)
+            self._randomizer.random_texture("table_top")
+            self._randomizer.random_texture("wall_left")
+            self._randomizer.random_texture("wall_right")
+            self._randomizer.random_texture("wall_back")
+            self._randomizer.random_texture("wall_front")
+            self._randomizer.random_light("light_source")
+            self._randomizer.random_object_color("hole")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+            self._randomizer.random_arm_height("ur3e/base")
+            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+            self._randomizer.random_distractors()
+            self._randomizer.random_texture_arm(self._arm)
             init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             self._random_state = self._randomizer.get_random_state()
             
@@ -622,7 +622,7 @@ class UR3eAssemblyEnv(gym.Env):
             'joints': joints.unsqueeze(0)           # Shape (3 x 6)
         }
 
-        # self.visualize_obs(stacked_obs)
+        self.visualize_obs(stacked_obs)
         
 
         

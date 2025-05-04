@@ -63,11 +63,11 @@ while True:
     # Choose a random action from the available action space
     # action = env.action_space.sample()
     action,hole,state = env.unwrapped.get_action_model(observation)
-    action_exp,state_exp,_, terminated_exp = env.unwrapped.get_action_bt() # expert
+    # action_exp,state_exp,_, terminated_exp = env.unwrapped.get_action_bt() # expert
     action = action 
 
-    print("Action expert : {}".format(action_exp))
-    print("Action : {}".format(action))
+    # print("Action expert : {}".format(action_exp))
+    # print("Action : {}".format(action))
     # print("Hole : {}".format(info["hole_pose"].reshape(7)))
     # print("Predicted Hole : {}".format(hole))
     # print("Predicted State : {}".format(state))
