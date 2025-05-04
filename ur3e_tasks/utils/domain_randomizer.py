@@ -331,8 +331,8 @@ class DomainRandomizer:
     def create_ws(self, model):
         inner = model.find('geom','inner_workspace')._get_attribute("size")[0]       
         outer = model.find('geom','outer_workspace')._get_attribute("size")[0]  
-        min_angle = (-np.pi/2)/10 + np.pi/6
-        max_angle = (np.pi/2)/10 + np.pi/6
+        min_angle = -np.pi/2 + np.pi/6
+        max_angle = np.pi/2 + np.pi/6
         min_height = model.find('body','outer_workspace')._get_attribute("pos")[2] - model.find('geom','outer_workspace')._get_attribute("size")[1]
         max_height = model.find('body','outer_workspace')._get_attribute("pos")[2] + model.find('geom','outer_workspace')._get_attribute("size")[1]
         table_radius = model.find('geom','table_top')._get_attribute("size")[0]

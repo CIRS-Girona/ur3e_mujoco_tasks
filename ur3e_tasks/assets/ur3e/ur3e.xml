@@ -148,7 +148,7 @@
   </keyframe> -->
 
   <sensor>
-    <force name="ee_force" site="attachment_site" cutoff="30"/>
-    <torque name="ee_torque" site="attachment_site" cutoff="10"/>
+    <force name="ee_force" site="attachment_site"/>
+    <torque name="ee_torque" site="attachment_site"/>
   </sensor>
 </mujoco>

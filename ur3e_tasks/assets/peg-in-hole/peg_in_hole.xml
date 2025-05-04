@@ -68,7 +68,7 @@
         <geom name="outer_workspace"  type="cylinder" size="0.4 0.001" rgba="0 1 0 0.15" conaffinity="0" contype="0" group="4"/>
     </body>
     <body name="inner_workspace" pos="0.0 0.0 1.0" euler="0  0.0  0">
-        <geom name="inner_workspace" type="cylinder" size="0.27 0.001" rgba="1 0 0 0.15" conaffinity="0" contype="0" group="4"/>
+        <geom name="inner_workspace" type="cylinder" size="0.3 0.001" rgba="1 0 0 0.15" conaffinity="0" contype="0" group="4"/>
     </body>
 
     <body name="hole" euler="1.5707 0 0" pos="0.17 0.23 1.03" mocap="true">

@@ -13,7 +13,7 @@ register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
     # Optionally, you can set a maximum number of steps per episode
-    max_episode_steps=1000,
+    max_episode_steps=500,
 )
 
 def parse_arguments():
@@ -59,6 +59,7 @@ def main():
     obs, info = env.reset()
     while True:
         action, _states = model.predict(obs, deterministic=True)
+        # print(f"action = {action}")
         obs, reward, terminated, truncated, info = env.step(action)
         if terminated or truncated:
             obs, info = env.reset()
