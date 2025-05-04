@@ -1,0 +1,19 @@
+digraph pastafarianism {
+ordering=out;
+graph [fontname="times-roman"];
+node [fontname="times-roman"];
+edge [fontname="times-roman"];
+assembly_seq [fillcolor=orange, fontcolor=black, fontsize=9, label="Ⓜ assembly_seq", shape=box, style=filled];
+set_up [fillcolor=gray, fontcolor=black, fontsize=9, label=set_up, shape=ellipse, style=filled];
+assembly_seq -> set_up;
+Retry_Move_And_Assemble [fillcolor=ghostwhite, fontcolor=black, fontsize=9, label=Retry_Move_And_Assemble, shape=ellipse, style=filled];
+assembly_seq -> Retry_Move_And_Assemble;
+move_and_assemble [fillcolor=orange, fontcolor=black, fontsize=9, label="Ⓜ move_and_assemble", shape=box, style=filled];
+Retry_Move_And_Assemble -> move_and_assemble;
+move_to_hole [fillcolor=gray, fontcolor=black, fontsize=9, label=move_to_hole, shape=ellipse, style=filled];
+move_and_assemble -> move_to_hole;
+assemble [fillcolor=gray, fontcolor=black, fontsize=9, label=assemble, shape=ellipse, style=filled];
+move_and_assemble -> assemble;
+rotate [fillcolor=gray, fontcolor=black, fontsize=9, label=rotate, shape=ellipse, style=filled];
+assembly_seq -> rotate;
+}

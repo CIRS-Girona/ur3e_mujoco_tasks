@@ -78,7 +78,7 @@ episode = 0
 data_list = []
 timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
 # Reset the environment with a specific seed for reproducibility
-observation, info = env.reset(seed=42)
+observation, info = env.reset(seed=None)
 
 # recored param
 collect_period = 100

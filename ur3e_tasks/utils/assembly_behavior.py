@@ -16,18 +16,17 @@ from scipy.spatial.transform import Rotation as R
 def wrap_angle(angle):
     return (angle + ( 2.0 * np.pi * np.floor( ( np.pi - angle ) / ( 2.0 * np.pi ) ) ) )
 
-def are_close(pose1, pose2, pos_thes = 0.005, ang_thes = 0.005):
+def are_close(pose1, pose2, xy_thes=0.005, z_thes=0.05, ang_thes=0.005):
+    err = pose_error(pose1, pose2)
 
-    err = pose_error(pose1,pose2)
-    pos_err = np.linalg.norm(err[:3])
-    ang_err = np.linalg.norm(err[3:])
+    xy_err = np.linalg.norm(err[0:2])  # x and y only
+    z_err = abs(err[2])                # z error separately
+    ang_err = np.linalg.norm(err[3:])  # angular error
 
-    
-    if pos_err < pos_thes and ang_err < ang_thes:
+    if xy_err < xy_thes and z_err < z_thes and ang_err < ang_thes:
         return True
 
-
-    return False  # If both position and orientation are close enough, return True
+    return False # If both position and orientation are close enough, return True
 
 import numpy as np
 
@@ -107,6 +106,8 @@ class SetUp(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("update_period", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("dagger", access=py_trees.common.Access.WRITE)
+
 
 
         self.blackboard.physics = physics
@@ -118,6 +119,7 @@ class SetUp(py_trees.behaviour.Behaviour):
         self.blackboard.success = False
         self.blackboard.terminate = False
         self.blackboard.update_period = update_period
+        self.blackboard.dagger = True
         
 
         
@@ -153,6 +155,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("dagger", access=py_trees.common.Access.READ)
 
         self.physics = self.blackboard.physics
         self.eef = self.blackboard.eef
@@ -163,9 +166,10 @@ class MoveToHole(py_trees.behaviour.Behaviour):
 
         self.offset = 0.1
         self.max_counter = 10000/self.blackboard.update_period
+        self.max_counter = 999999999
 
         self.close_counter = 0
-        self.close_threshold = 50
+        self.close_threshold = 2 # 50
 
     def setup(self):
         self.logger.debug("  %s [MoveToHole::setup()]" % self.name)
@@ -178,9 +182,12 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         hole_quat = mat2quat(self.physics.bind(self.hole).xmat.reshape(3, 3))
         self.hole_pose = np.concatenate([hole_pos, hole_quat])
         self.hole_pose = plus_pose(self.hole_pose,self.offset,axis='z')
+        # self.hole_pose = plus_pose(self.hole_pose,0.05,axis='x')
 
     def update(self):
         self.counter = self.counter + 1
+        self.blackboard.success = False
+        self.blackboard.terminate = False
         if self.counter > self.max_counter:
             self.logger.debug(f"  {self.name}: Timeout exceeded")
             self.blackboard.success = False
@@ -193,7 +200,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pose, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose) :
+        if are_close(self.hole_pose,eef_pose,xy_thes=0.07,z_thes=0.1,ang_thes=0.05) :
             if self.close_counter >=self.close_threshold:
                 self.close_counter = 0
                 self.logger.debug("MoveToHole SUCCESS!!!")
@@ -228,11 +235,12 @@ class Assemble(py_trees.behaviour.Behaviour):
         self.eef = self.blackboard.eef
         self.hole = self.blackboard.hole
 
-        self.vel_lim = 0.035
+        self.vel_lim = 0.035 #0.035
         self.ang_vel_lim = 0.2
 
         self.offset = 0.0
         self.max_counter = 8000/self.blackboard.update_period
+        self.max_counter = 999999999
 
     def setup(self):
         self.logger.debug("  %s [Assemble::setup()]" % self.name)
@@ -247,6 +255,8 @@ class Assemble(py_trees.behaviour.Behaviour):
         self.hole_pose = np.concatenate([hole_pos, hole_quat])
     def update(self):
         self.counter = self.counter + 1
+        self.blackboard.success = False
+        self.blackboard.terminate = False
         if self.counter > self.max_counter:
             self.logger.debug(f"  {self.name}: Timeout exceeded")
             self.blackboard.success = False
@@ -259,9 +269,15 @@ class Assemble(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pos, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose):
+        if are_close(self.hole_pose,eef_pose,z_thes=0.01,xy_thes=0.012,ang_thes=0.02) :
             self.logger.debug("Assemble SUCCESS!!!")
             return py_trees.common.Status.SUCCESS
+        elif not are_close(self.hole_pose,eef_pose,z_thes=0.2,xy_thes=0.012,ang_thes=0.02) :
+            self.logger.debug("Assemble Misalign!!!")
+            self.alingned_pose = self.hole_pose.copy()
+            self.alingned_pose[2] = eef_pose[2] 
+            self.blackboard.command = [self.alingned_pose,self.vel_lim,self.ang_vel_lim]
+            return py_trees.common.Status.RUNNING
         else:
             self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
@@ -283,6 +299,7 @@ class Rotate(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("dagger", access=py_trees.common.Access.READ)
 
         self.physics = self.blackboard.physics
         self.eef = self.blackboard.eef
@@ -293,6 +310,7 @@ class Rotate(py_trees.behaviour.Behaviour):
 
         self.offset = 0.0
         self.max_counter = 4000/self.blackboard.update_period
+        self.max_counter = 999999999
 
     def setup(self):
         self.logger.debug("  %s [Rotate::setup()]" % self.name)
@@ -326,6 +344,9 @@ class Rotate(py_trees.behaviour.Behaviour):
             self.logger.debug("Rotate SUCCESS!!!")
             self.blackboard.success = True
             self.blackboard.terminate = True
+            if self.blackboard.dagger:
+                self.blackboard.command = [self.rotated_pose,self.vel_lim,self.ang_vel_lim]
+                return py_trees.common.Status.RUNNING
             return py_trees.common.Status.SUCCESS
         else:
             self.blackboard.command = [self.rotated_pose,self.vel_lim,self.ang_vel_lim]
@@ -356,9 +377,21 @@ class AssemblyBT:
         move_to_hole = MoveToHole("move_to_hole")
         assemble = Assemble("assemble")
         rotate = Rotate("rotate")
-        
+        # Sub-sequence for move and assemble
+        move_and_assemble = py_trees.composites.Sequence(name="move_and_assemble", memory=True)
+        move_and_assemble.add_children([move_to_hole, assemble])
+
+        # Retry decorator around the move-and-assemble sequence
+        retry_move_and_assemble = py_trees.decorators.Retry(
+            name="Retry_Move_And_Assemble",
+            child=move_and_assemble,
+            num_failures=999  # adjust as needed
+        )
+
+        # Top-level sequence
         assembly_seq = py_trees.composites.Sequence(name="assembly_seq", memory=True)
-        assembly_seq.add_children([set_up,move_to_hole,assemble,rotate])
+        assembly_seq.add_children([set_up, retry_move_and_assemble, rotate])
+        
 
         self.bt = assembly_seq
         py_trees.display.render_dot_tree(self.bt )

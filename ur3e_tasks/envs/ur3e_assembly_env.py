@@ -40,6 +40,8 @@ class UR3eAssemblyEnv(gym.Env):
             low=-0.1, high=0.1, shape=(6,), dtype=np.float64
         )
 
+        self._camera1 = None
+
         # model related
         self._model = None
         self.obs_list = []
@@ -214,20 +216,20 @@ class UR3eAssemblyEnv(gym.Env):
         # domain randomize
         if self.random_domain:
             hole_pos = self._randomizer.random_object_in_ws("hole")
-            self._randomizer.random_texture("table_top")
-            self._randomizer.random_texture("wall_left")
-            self._randomizer.random_texture("wall_right")
-            self._randomizer.random_texture("wall_back")
-            self._randomizer.random_texture("wall_front")
-            self._randomizer.random_light("light_source")
-            self._randomizer.random_object_color("hole")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
-            self._randomizer.random_arm_height("ur3e/base")
-            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
-            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
-            self._randomizer.random_distractors()
-            self._randomizer.random_texture_arm(self._arm)
+            # self._randomizer.random_texture("table_top")
+            # self._randomizer.random_texture("wall_left")
+            # self._randomizer.random_texture("wall_right")
+            # self._randomizer.random_texture("wall_back")
+            # self._randomizer.random_texture("wall_front")
+            # self._randomizer.random_light("light_source")
+            # self._randomizer.random_object_color("hole")
+            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+            # self._randomizer.random_arm_height("ur3e/base")
+            # self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+            # self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+            # self._randomizer.random_distractors()
+            # self._randomizer.random_texture_arm(self._arm)
             init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             self._random_state = self._randomizer.get_random_state()
             
@@ -263,7 +265,7 @@ class UR3eAssemblyEnv(gym.Env):
         # init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
         # init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
         if self.random_domain:
-            print("Init Pose: {}".format(init_pose))
+            # print("Init Pose: {}".format(init_pose))
             # time.sleep(50)
             self._target.set_mocap_pose(self._physics, position=init_pose[:3], quaternion=init_pose[3:])
             target_pose = self._target.get_mocap_pose(self._physics)
@@ -304,7 +306,7 @@ class UR3eAssemblyEnv(gym.Env):
         self.i = self.i + 1
         terminated = False
         # action = [0.267633,  0., -0., -0., -0., -0.]
-        print(action)
+        # print(action)
 
         # behavior
         # cmd, state, success, terminated = self._bt.run()
@@ -429,6 +431,7 @@ class UR3eAssemblyEnv(gym.Env):
         """
         if self._viewer is not None:
             self._viewer.close()
+        if self._camera1 is not None:
             self._camera1._renderer.close()
             self._camera2._renderer.close()
             self._hand_camera._renderer.close()
@@ -516,26 +519,29 @@ class UR3eAssemblyEnv(gym.Env):
         return vel_cmd
     
     def get_action_model(self,obs):
-        start_time  = time.time()
+        
         stacked_obs = self.update_obs(obs)
-        if self.i % 300 == 0:
+        if self.i % 100 == 0:
+            # start_time  = time.time()
             stacked_obs = self.stack_obs()
+            # print("Stack time: {}".format(time.time()-start_time))
             front_im = stacked_obs["front"]
             side_im = stacked_obs["side"]
             hand_im = stacked_obs["hand"]
             ee_pose = stacked_obs["ee_pose"]
             joint_state = stacked_obs["joints"]
+   
             with torch.no_grad():  # Disable gradient calculation for inference
                 vel, hole_pose, est_state = self._model(front_im, side_im, hand_im, ee_pose, joint_state)
+            
 
             base = self._arena.mjcf_model.find('body', "ur3e/base")
-            hole_pose_w = self.pose_in_world(np.array(hole_pose).reshape(7),base)
+            hole_pose_w = self.pose_in_world(np.array(hole_pose.to("cpu")).reshape(7),base)
 
             self._target.set_mocap_pose(self._physics, position=hole_pose_w[:3], quaternion=hole_pose_w [3:])
         # print(np.array(vel).reshape(6))
-            self.pred_vel, self.pred_pose, self.pred_state = np.array(vel).reshape(6), np.array(hole_pose).reshape(7), torch.argmax(est_state)
-        print("Inference time: {}".format(time.time()-start_time))
-
+            self.pred_vel, self.pred_pose, self.pred_state = np.array(vel.to("cpu")).reshape(6), np.array(hole_pose.to("cpu")).reshape(7), torch.argmax(est_state.to("cpu"))
+        
         return self.pred_vel, self.pred_pose, self.pred_state
     
     def update_obs(self,new_obs):
@@ -582,28 +588,29 @@ class UR3eAssemblyEnv(gym.Env):
         # ee_pose.reverse()
         # joints.reverse()
 
-   
+        # start_time  = time.time()
         # Convert lists to tensors (assuming images are torch tensors)
-        front_images = torch.tensor(np.stack([
+        front_images = torch.from_numpy(np.stack([
             front_images[0], front_images[1], front_images[2]
-        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
-        side_images = torch.tensor(np.stack([
+        ])).float().to("cuda") / 255.0  # (3, 180,240,3)
+        side_images = torch.from_numpy(np.stack([
             side_images[0], side_images[1], side_images[2]
-        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
-        hand_images = torch.tensor(np.stack([
+        ])).float().to("cuda") / 255.0  # (3, 180,240,3)
+        hand_images = torch.from_numpy(np.stack([
             hand_images[0], hand_images[1], hand_images[2]
-        ]), dtype=torch.float32) / 255.0  # (3, 180,240,3)
-        ee_pose = torch.tensor(np.stack([
+        ])).float().to("cuda") / 255.0  # (3, 180,240,3)
+        ee_pose = torch.from_numpy(np.stack([
             ee_pose[0].reshape(7),
             ee_pose[1].reshape(7),
             ee_pose[2].reshape(7)
-        ]), dtype=torch.float32)  # (3,7)
+        ]) ).float().to("cuda")  # (3,7)
 
-        joints = torch.tensor(np.stack([
+        joints = torch.from_numpy(np.stack([
             joints[0].reshape(6),
             joints[1].reshape(6),
             joints[2].reshape(6)
-        ]), dtype=torch.float32)  # (3,6)
+        ]) ).float().to("cuda")  # (3,6)
+        # print("tensor time: {}".format(time.time()-start_time))
 
      
         # Combine the images and the states (ee_pose and joints)
@@ -682,7 +689,7 @@ class UR3eAssemblyEnv(gym.Env):
         mat = base_rot @ target_rot
         quat = mat2quat(mat)
         pose = np.concatenate([position,quat])
-        print("EE pos2: {}".format(pose))
+        # print("EE pos2: {}".format(pose))
 
         return pose
     
