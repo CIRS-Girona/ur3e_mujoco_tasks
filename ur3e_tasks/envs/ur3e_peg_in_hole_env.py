@@ -445,6 +445,15 @@ class UR3ePegInHoleEnv(gym.Env):
             terminated = False
 
         return reward, terminated, reward_list, success
+    
+    def set_learning_stage(self,stage):
+        '''
+            Set learning stage.
+            Args:
+                stage: (int) learning stage to set.
+        '''
+        self.learning_stage = stage
+        print(f"Setting environment to stage {self.learning_stage}")
 
     ############################
     # HELPER FUNCTIONS

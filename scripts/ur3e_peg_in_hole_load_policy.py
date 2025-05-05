@@ -22,14 +22,15 @@ def parse_arguments():
     # Define arguments
     parser.add_argument('--algorithm', type=str, required=True, help='The algorithm used (SAC, TD3)')
     parser.add_argument('--filename', type=str, required=True, help='The name of the file to load (NOTE: algorithm must match --algorithm)')
+    parser.add_argument('--learning-stage', type=int, required=False, default=1, help='Learning stage to test (default=1)')
 
     # Parse arguments
     args = parser.parse_args()
 
-    return args.algorithm, args.filename
+    return args.algorithm, args.filename, args.learning_stage
 
 def main():
-    algorithm, filename = parse_arguments()
+    algorithm, filename, stage = parse_arguments()
     # Create the environment with rendering in human mode
     env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
 
@@ -55,6 +56,9 @@ def main():
         model = alg_func.load(file_path)
     except:
         raise "Error loading model!"
+    
+    # set environment learning stage
+    env.unwrapped.set_learning_stage(stage)
 
     obs, info = env.reset()
     while True:

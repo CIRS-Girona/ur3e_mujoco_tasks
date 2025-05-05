@@ -23,9 +23,12 @@ def parse_arguments():
 
     # Define arguments
     parser.add_argument('--algorithm', type=str, required=True, help='The algorithm to use (SAC, TD3)')
-    parser.add_argument('--save-filename', type=str, required=True, help='The name of the file to save the model to')
+    parser.add_argument('--filename', type=str, required=True, help='The name of the folder to save the model to, or if --continue-training is enabled, the name of folder to load model.')
     parser.add_argument('--total-timesteps', type=int, required=False, default=10000, help='Total timesteps to train')
     parser.add_argument('--render', action='store_true', help='Enable renderring.')
+
+    parser.add_argument('--continue-training', action='store_true', help='Continue training from a saved model')
+    parser.add_argument('--starting-stage', type=int, required=False, default=1, help='Curriculum learning stage to start training with')
     # parser.add_argument('--enable-log', action='store_true', help='Enable logging.')
 
     # Parse arguments
@@ -43,19 +46,21 @@ def main():
     # Create the environment with rendering in human mode
     env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode=render_mode)
 
+    # set environment learning stage
+    env.unwrapped.set_learning_stage(args.starting_stage)
+
     # check_env(env)
 
     ## Training Phase
-
     # directory and file name to save trained model
     SAVE_DIR = Path(__file__).parent /'..' / 'models'
     # Make sure the directory exists
     os.makedirs(SAVE_DIR, exist_ok=True)
-    save_path = os.path.join(SAVE_DIR,args.save_filename)
+    save_path = os.path.join(SAVE_DIR,args.filename)
 
     # directory for logging
     LOG_DIR = Path(__file__).parent /'..' / 'log'
-    log_path = os.path.join(LOG_DIR,args.save_filename)
+    log_path = os.path.join(LOG_DIR,args.filename)
     os.makedirs(log_path, exist_ok=True)
 
 
@@ -67,7 +72,21 @@ def main():
     else:
         raise "Algorithm is not valid!"
 
-    model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=log_path)
+
+    # load model if continue training is requested
+    if args.continue_training:
+        # search for the last model
+        for file in os.listdir(save_path):
+            full_path = os.path.join(save_path, file)
+            if os.path.isfile(full_path) and 'final' in file:
+                model_loadpath = full_path
+        # load that model
+        model = alg_func.load(model_loadpath, tensorboard_log=log_path)
+        model.verbose = 1
+        model.set_env(env)
+    else:
+        model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=log_path)
+
 
     callback = SuccessTrackerCallback(
         n_episodes=50,
@@ -77,7 +96,7 @@ def main():
         verbose=1
     )
 
-    model.learn(total_timesteps=args.total_timesteps, callback=callback, tb_log_name="general")
+    model.learn(total_timesteps=args.total_timesteps, callback=callback, tb_log_name="general", reset_num_timesteps=False)
 
 if __name__ == "__main__":
     main()

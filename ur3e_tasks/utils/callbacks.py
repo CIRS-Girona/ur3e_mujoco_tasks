@@ -38,7 +38,10 @@ class SuccessTrackerCallback(BaseCallback):
         while hasattr(env, "env"):
             env = env.env  # unwrap Monitor and any wrappers
         self.current_stage = getattr(env, "learning_stage")
-        self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, f"stage_{self.current_stage}"))
+        stage_logdir = os.path.join(self.log_dir, f"stage_{self.current_stage}")
+        if os.path.exists(stage_logdir): # in case of continuing training
+            stage_logdir = stage_logdir + "_resume"
+        self.writer = SummaryWriter(log_dir=stage_logdir)
 
     def _on_step(self) -> bool:
         self.current_rewards.append(self.locals["rewards"])
@@ -108,6 +111,9 @@ class SuccessTrackerCallback(BaseCallback):
         return True
 
     def _on_training_end(self) -> None:
-        self.model.save(os.path.join(self.save_path, f"model_stage_{self.current_stage}_final.zip"))
+        stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final.zip")
+        if os.path.exists(stage_savefile): # in case of continuing training and stage still doesn't advance at all
+            stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final2.zip")
+        self.model.save(stage_savefile)
         if self.writer:
             self.writer.close()
