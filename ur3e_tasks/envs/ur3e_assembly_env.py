@@ -622,7 +622,7 @@ class UR3eAssemblyEnv(gym.Env):
             'joints': joints.unsqueeze(0)           # Shape (3 x 6)
         }
 
-        self.visualize_obs(stacked_obs)
+        # self.visualize_obs(stacked_obs)
         
 
         

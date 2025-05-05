@@ -200,7 +200,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pose, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose,xy_thes=0.07,z_thes=0.1,ang_thes=0.05) :
+        if are_close(self.hole_pose,eef_pose,xy_thes=0.085,z_thes=0.1,ang_thes=0.08) :
             if self.close_counter >=self.close_threshold:
                 self.close_counter = 0
                 self.logger.debug("MoveToHole SUCCESS!!!")
@@ -269,13 +269,15 @@ class Assemble(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pos, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose,z_thes=0.01,xy_thes=0.012,ang_thes=0.02) :
+        if are_close(self.hole_pose,eef_pose,z_thes=0.022,xy_thes=0.03,ang_thes=0.02) :
             self.logger.debug("Assemble SUCCESS!!!")
             return py_trees.common.Status.SUCCESS
-        elif not are_close(self.hole_pose,eef_pose,z_thes=0.2,xy_thes=0.012,ang_thes=0.02) :
+        elif not are_close(self.hole_pose,eef_pose,z_thes=0.2,xy_thes=0.011,ang_thes=0.017) :
+            if abs(self.hole_pose[2] - eef_pose[2]) < 0.03:
+                self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
             self.logger.debug("Assemble Misalign!!!")
             self.alingned_pose = self.hole_pose.copy()
-            self.alingned_pose[2] = eef_pose[2] 
+            self.alingned_pose[2] = eef_pose[2] + 0.01
             self.blackboard.command = [self.alingned_pose,self.vel_lim,self.ang_vel_lim]
             return py_trees.common.Status.RUNNING
         else:
