@@ -7,7 +7,7 @@ class SuccessTrackerCallback(BaseCallback):
     def __init__(
         self,
         n_episodes=100,
-        next_stage_threshold=100,
+        next_stage_threshold=1.0,
         log_dir="logs_custom",
         save_path="models",
         verbose=0,
@@ -32,6 +32,8 @@ class SuccessTrackerCallback(BaseCallback):
         self.writer = None
 
         self.max_learning_stage = 4
+
+        self.save_frequency = 25000 # number of timesteps between each saved model
 
     def _on_training_start(self) -> None:
         env = self.training_env.envs[0]
@@ -66,6 +68,11 @@ class SuccessTrackerCallback(BaseCallback):
         
         self.logging_timestep += 1
 
+        # save checkpoint models
+        if self.logging_timestep % self.save_frequency == 0:
+            checkpoint_filename = f"model_stage_{self.current_stage}_step_{self.logging_timestep}.zip"
+            self.model.save(os.path.join(self.save_path, checkpoint_filename))
+
         if self.locals["dones"]:
             # Get info and success
             info = self.locals["infos"]
@@ -85,7 +92,7 @@ class SuccessTrackerCallback(BaseCallback):
             self.episodes_done += 1
 
             # Compute stats
-            success_rate = 100.0 * sum(self.success_history) / len(self.success_history)
+            success_rate = sum(self.success_history) / len(self.success_history)
             ep_rew_mean = sum(self.rewards_history) / len(self.rewards_history)
             ep_len_mean = sum(self.lengths_history) / len(self.lengths_history)
 
@@ -104,7 +111,7 @@ class SuccessTrackerCallback(BaseCallback):
             if (success_rate >= self.next_stage_threshold) and (self.episodes_done >= self.n_episodes):
                 if hasattr(env, "learning_stage"):
                     env.learning_stage += 1 if env.learning_stage < self.max_learning_stage else 0
-                    print("Advance curriculum")
+                    print(f"Advance to stage {env.learning_stage}")
                 else:
                     raise AttributeError("Environment must have a 'learning_stage' attribute.")
 

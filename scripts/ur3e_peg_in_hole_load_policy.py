@@ -13,7 +13,7 @@ register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
     # Optionally, you can set a maximum number of steps per episode
-    max_episode_steps=500,
+    max_episode_steps=250,
 )
 
 def parse_arguments():

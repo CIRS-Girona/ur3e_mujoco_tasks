@@ -90,7 +90,7 @@ def main():
 
     callback = SuccessTrackerCallback(
         n_episodes=50,
-        next_stage_threshold=90,
+        next_stage_threshold=0.9,
         log_dir=log_path,
         save_path=save_path,
         verbose=1
