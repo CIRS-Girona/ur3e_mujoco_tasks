@@ -3,13 +3,13 @@ import manipulator_mujoco
 from gymnasium.envs.registration import register
 import numpy as np
 
-from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle
+from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, quat2mat
 
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
     # Optionally, you can set a maximum number of steps per episode
-    max_episode_steps=500,
+    max_episode_steps=1000,
 )
 
 def invert_rotation(rot_matrix):
@@ -18,11 +18,17 @@ def invert_rotation(rot_matrix):
     rotz90 = np.array([[0,-1,0],[1,0,0],[0,0,1]])
     return rot_matrix @ rotx180 @ rotz90
 
-def generate_target_vel(info,obs,target):
-    peg_end_pos = info["peg_end_pos"]
-    peg_end_rot = info["peg_end_rot"]
-    hole_rot = info["hole_rot"]
-    intermediate_pt = info["intermediate_target_pos"]
+def generate_target_vel(obs,target):
+    peg_end_pos = obs[6:9]
+    peg_end_quat = obs[9:13] #wxyz
+    peg_end_rot = quat2mat([peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]])
+    hole_pos = obs[13:16]
+    hole_quat = obs[16:20] #wxyz
+    hole_rot = quat2mat([hole_quat[1], hole_quat[2], hole_quat[3], hole_quat[0]])
+
+    # set intermediate target position (above the hole)
+    offset = hole_rot @ np.array([0,0,0.07]).T
+    intermediate_pt = hole_pos + offset
 
     # align the frames bcs hole is z+ up, and peg is z+ down
     hole_rot_inverted = invert_rotation(hole_rot)
@@ -49,7 +55,10 @@ def generate_target_vel(info,obs,target):
 
     # assign target and position error based on simulation state
     if (distance_to_intermediate_pt < 0.005 and ori_error_norm < 0.05) or target=="hole": # if peg end is already at the intermediate point and orientation aligns
-        pos_error = obs[6:9] # take hole position directly
+        # compute pos error to hole instead
+        hole_transform = np.block([[hole_rot,hole_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
+        hole_wrt_peg_transform = np.linalg.inv(peg_end_transform) @ hole_transform
+        pos_error = hole_wrt_peg_transform[:3,3]
         target = "hole"
     else:
         target = "intermediate"
@@ -66,6 +75,7 @@ def generate_target_vel(info,obs,target):
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
+env.unwrapped.set_learning_stage(4)
 
 # Reset the environment with a specific seed for reproducibility
 observation, info = env.reset(seed=42)
@@ -85,7 +95,7 @@ while True:
     i+=1
     # Choose a random action from the available action space
     # action = env.action_space.sample()
-    action,target = generate_target_vel(info,observation,target)
+    action,target = generate_target_vel(observation,target)
     # action = np.array([-0.3,0.3,-0.5,0.0,0.0])
     # print("action = ", action)
     # Take a step in the environment using the chosen action

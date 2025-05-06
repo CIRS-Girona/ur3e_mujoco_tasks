@@ -31,13 +31,15 @@ class UR3ePegInHoleEnv(gym.Env):
         # force and torque limits taken from UR3e datasheet
         self.obs_limit = np.array([60.0, 60.0, 60.0, # force limits
                                    10.0, 10.0, 10.0, # torque limits
-                                   np.inf, np.inf, np.inf, # distance limits
-                                   1.0, 1.0, 1.0, 1.0, # angular difference (quat) limits
+                                   np.inf, np.inf, np.inf, # peg position limits
+                                   1.0, 1.0, 1.0, 1.0, # peg quat limits
+                                   np.inf, np.inf, np.inf, # hole position limits
+                                   1.0, 1.0, 1.0, 1.0, # hole quat limits
                                    np.pi, np.pi, np.pi, np.pi, np.pi, np.pi]) # joint position limits
         self.observation_space = spaces.Box(
             low=-self.obs_limit,
             high=self.obs_limit,
-            shape=(19,), 
+            shape=(26,), 
             dtype=np.float64
         )
 
@@ -171,18 +173,20 @@ class UR3ePegInHoleEnv(gym.Env):
         self._peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
         peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
         self._peg_end_rot = peg_end_rot.reshape(3,3)
-        peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
+        # peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
 
-        # position and orientation of hole w.r.t. world
-        hole_transform = np.block([[self._hole_rot,self._hole_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
+        peg_end_quat = self._physics.bind(self._peg_end).xquat.copy() #wxyz
 
-        # multiply transform matrices to obtain transformation from peg to hole
-        hole_wrt_peg_transform = np.linalg.inv(peg_end_transform) @ hole_transform
+        # # position and orientation of hole w.r.t. world
+        # hole_transform = np.block([[self._hole_rot,self._hole_pos.reshape(-1,1)],[0,0,0,1]]) # transformation matrix
 
-        # extract position and orientation of hole w.r.t. peg
-        hole_wrt_peg_pos = hole_wrt_peg_transform[:3,3]
-        hole_wrt_peg_rot = hole_wrt_peg_transform[:3,:3] # rotation matrix
-        hole_wrt_peg_quat = mat2quat(hole_wrt_peg_rot) # format: xyzw
+        # # multiply transform matrices to obtain transformation from peg to hole
+        # hole_wrt_peg_transform = np.linalg.inv(peg_end_transform) @ hole_transform
+
+        # # extract position and orientation of hole w.r.t. peg
+        # hole_wrt_peg_pos = hole_wrt_peg_transform[:3,3]
+        # hole_wrt_peg_rot = hole_wrt_peg_transform[:3,:3] # rotation matrix
+        # hole_wrt_peg_quat = mat2quat(hole_wrt_peg_rot) # format: xyzw
 
         # print("hole_wrt_peg_pos = ", hole_wrt_peg_pos)
         # print("hole_wrt_peg_quat = ", hole_wrt_peg_quat)
@@ -191,16 +195,19 @@ class UR3ePegInHoleEnv(gym.Env):
         joint_pos = self._physics.data.qpos.copy()
         # print("joint pos = ",joint_pos)
 
-        return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pos,hole_wrt_peg_quat,joint_pos))
+        # return np.concatenate((sensor_force,sensor_torque,hole_wrt_peg_pos,hole_wrt_peg_quat,joint_pos))
+        return np.concatenate((sensor_force, 
+                               sensor_torque, 
+                               self._peg_end_pos,
+                               peg_end_quat,
+                               self._hole_pos,
+                               self._hole_quat,
+                               joint_pos))
 
     def _get_info(self) -> dict:
         # only called at reset
         return {
             "learning_stage":self.learning_stage,
-            "peg_end_pos":self._peg_end_pos,
-            "peg_end_rot":self._peg_end_rot,
-            "hole_pos":self._hole_pos,
-            "hole_rot":self._hole_rot,
             "intermediate_target_pos":self.intermediate_target_pos}
 
     def reset(self, seed=None, options=None) -> tuple:
@@ -234,7 +241,7 @@ class UR3ePegInHoleEnv(gym.Env):
             self._hole_rot = self._hole_rot.reshape(3,3)
 
             # NECESSARY FOR TESTING WITH POSITION CONTROLLER
-            # self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
+            self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
             # self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
             
             # reset gravity back to normal
@@ -247,8 +254,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
             
             self.intermediate_target_pos = self._hole_pos.copy()
-            R_world_to_hole = self._physics.bind(self._hole_frame).xmat.reshape(3,3)
-            offset = R_world_to_hole @ np.array([0,0,0.07]).T
+            offset = self._hole_rot @ np.array([0,0,0.07]).T
             # print("offset = ",offset)
             self.intermediate_target_pos += offset
             ###########################################
@@ -299,7 +305,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
-        for _ in range(10):
+        for _ in range(20):
             self._controller.run(target_vel) # CHANGE TO target_vel TO USE VELOCITY CONTROLLER
             # step physics
             self._physics.step()
@@ -324,16 +330,14 @@ class UR3ePegInHoleEnv(gym.Env):
         
         info = {
             "learning_stage":self.learning_stage,
-            "peg_end_pos":self._peg_end_pos,
-            "peg_end_rot":self._peg_end_rot,
-            "hole_pos":self._hole_pos,
-            "hole_rot":self._hole_rot,
             "intermediate_target_pos":self.intermediate_target_pos,
             "forces":observation[:3],
             "torques":observation[3:6],
-            "distance_to_hole":observation[6:9],
-            "orientation_difference":observation[9:13],
-            "joint_pos":observation[13:],
+            "peg_end_pos":observation[6:9],
+            "peg_end_quat":observation[9:13],
+            "hole_pos":observation[13:16],
+            "hole_quat":observation[16:20],
+            "joint_pos":observation[20:],
             "reward_distance": reward_list[0],
             "reward_action": reward_list[1],
             "reward_force": reward_list[2],
@@ -407,7 +411,8 @@ class UR3ePegInHoleEnv(gym.Env):
         # print(f"learning_stage = {self.learning_stage}")
         ## Reward function
         # reward based on distance
-        reward_dist = self.map_reward(observation[6:9],self.max_dist)
+        distance = observation[13:16] - observation[6:9]
+        reward_dist = self.map_reward(distance,self.max_dist)
         # print("reward_dist = ",reward_dist)
 
         # reward based on magnitude of action taken
@@ -425,7 +430,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # (must be less than a certain threshold)
         # print("distance from hole = ", np.linalg.norm(observation[6:9]))
         # task_completed = np.linalg.norm(observation[6:9]) < self.dist_threshold
-        task_completed = self.check_task_completed(observation)
+        task_completed = self.check_task_completed()
 
         # safety violation occurs if any of the detected forces and torques exceeds the limit
         safety_violation = self.check_safety_violation(observation[:6])
@@ -434,7 +439,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # assign reward and flags
         if task_completed:
-            reward = 300
+            reward = 100
             success = True
             terminated = True
         elif safety_violation:
@@ -512,10 +517,10 @@ class UR3ePegInHoleEnv(gym.Env):
         twist_w = A @ twist_b.reshape(-1,1)
         return twist_w.reshape(-1)
     
-    def check_task_completed(self,observation):
+    def check_task_completed(self):
         if self.learning_stage < 4:
             # reproduce transformation matrix of peg (w.r.t. world)
-            peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]]) 
+            peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]])             
             # align the frames bcs hole is z+ up, and peg is z+ down
             hole_rot_inverted = self.align_hole_to_peg(self._hole_rot)
             # compute transformation from intermediate point to peg
@@ -547,7 +552,8 @@ class UR3ePegInHoleEnv(gym.Env):
                     task_completed = (distance_to_intermediate_pt < 0.005) and (ori_error_norm < 0.05) 
         else: # self.learning_stage == 4
             # Define success = peg is successfully inserted into the hole
-            task_completed = np.linalg.norm(observation[6:9]) < self.dist_threshold
+            distance = np.linalg.norm(self._hole_pos - self._peg_end_pos)
+            task_completed = distance < self.dist_threshold
 
         return task_completed
 
