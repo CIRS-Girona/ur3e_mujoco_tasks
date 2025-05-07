@@ -81,11 +81,11 @@ def main():
             if os.path.isfile(full_path) and 'final' in file:
                 model_loadpath = full_path
         # load that model
-        model = alg_func.load(model_loadpath, tensorboard_log=log_path)
+        model = alg_func.load(model_loadpath, tensorboard_log=log_path, device='cuda')
         model.verbose = 1
         model.set_env(env)
     else:
-        model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=log_path)
+        model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=log_path, device='cuda')
 
 
     callback = SuccessTrackerCallback(
