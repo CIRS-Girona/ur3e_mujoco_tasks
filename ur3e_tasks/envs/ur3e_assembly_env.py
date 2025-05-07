@@ -22,6 +22,7 @@ from manipulator_mujoco.utils.transform_utils import (
     mat2quat, quat2mat
 )
 import torch
+import pyquaternion as pyq
 class UR3eAssemblyEnv(gym.Env):
 
     metadata = {
@@ -336,6 +337,9 @@ class UR3eAssemblyEnv(gym.Env):
     
         self._controller.run(action)
 
+
+        # move hole with keyboard
+
         # step physics
         for i in range(1):
             self._physics.step()
@@ -376,6 +380,7 @@ class UR3eAssemblyEnv(gym.Env):
             self._viewer = mujoco.viewer.launch_passive(
                 self._physics.model.ptr,
                 self._physics.data.ptr,
+                key_callback=self.key_callback
             )
             self._viewer.cam.distance = 1.2
             self._viewer.cam.azimuth = -150
@@ -774,4 +779,37 @@ class UR3eAssemblyEnv(gym.Env):
         cv2.waitKey(1)  # Wait for key press
         
 
-        
+    def key_callback(self,key):
+        hole_body = self._arena.mjcf_model.find('body', "hole")
+        hole = self._physics.bind(hole_body)
+        if key == 265:  # Up arrow
+            hole.mocap_pos[0] += 0.01
+        elif key == 264:  # Down arrow
+            hole.mocap_pos[0] -= 0.01
+        elif key == 263:  # Left arrow
+            hole.mocap_pos[1] -= 0.01
+        elif key == 262:  # Right arrow
+            hole.mocap_pos[1] += 0.01
+        elif key == 260:  # Insert
+            
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [1, 0, 0], 10)
+        elif key == 261:  # Home
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [1, 0, 0], -10)
+        elif key == 268:  # Home
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [0, 1, 0], 10)
+        elif key == 269:  # End
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [0, 1, 0], -10)
+        elif key == 266:  # Page Up
+            print(hole.mocap_quat[:])
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [0, 0, 1], 10)
+        elif key == 267:  # Page Down
+            hole.mocap_quat[:] = self.rotate_quaternion(hole.mocap_quat[:], [0, 0, 1], -10)
+        else:
+            print(key)
+
+    def rotate_quaternion(self,quat, axis, angle):
+        angle_rad = np.deg2rad(angle)
+        axis = axis / np.linalg.norm(axis)
+        q = pyq.Quaternion(quat)
+        q = q * pyq.Quaternion(axis=axis, angle=angle_rad)
+        return q.elements
