@@ -207,7 +207,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
             # NECESSARY FOR TESTING WITH POSITION CONTROLLER
             self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
-            # self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
+            self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
@@ -217,10 +217,17 @@ class UR3ePegInHoleEnv(gym.Env):
             peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
             self._peg_end_rot = peg_end_rot.reshape(3,3)
 
-            
+            # set intermediate point: a point above the hole
             self.intermediate_target_pos = self._hole_pos.copy()
-            offset = self._hole_rot @ np.array([0,0,0.07]).T
+            if self.learning_stage <= 3:
+                offset = self._hole_rot @ np.array([0,0,0.07]).T
+            # elif self.learning_stage == 3:
+            #     offset = self._hole_rot @ np.array([0,0,0.055]).T
+            else:
+                offset = np.array([0,0,0])
             self.intermediate_target_pos += offset
+            # visualization
+            self._target.set_mocap_pose(self._physics, position=self.intermediate_target_pos[:3], quaternion=self._hole_quat_xyzw.copy())
 
 
         # reset flag
@@ -478,7 +485,7 @@ class UR3ePegInHoleEnv(gym.Env):
                     task_completed = distance_to_intermediate_pt < 0.01
 
                 elif self.learning_stage == 3:
-                    # Define success = peg reaches the intermediate point and align its orientation with the hole 
+                    # Define success = peg reaches the intermediate point and align its orientation with the hole
                     # Compute orientation error
                     peg_wrt_intermediate_pt_rot = intermediate_pt_to_peg_transform[:3,:3] 
                     ori_error = quat2axisangle(mat2quat(peg_wrt_intermediate_pt_rot)) 

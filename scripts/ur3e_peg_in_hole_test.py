@@ -75,7 +75,7 @@ def generate_target_vel(obs,target):
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
-env.unwrapped.set_learning_stage(4)
+env.unwrapped.set_learning_stage(1)
 
 # Reset the environment with a specific seed for reproducibility
 observation, info = env.reset(seed=42)
@@ -116,6 +116,14 @@ while True:
         print(f"Success rate = {success_count/total_ep}")
         print(f"Average episode length = {total_ep_len/total_ep}")
         # If the episode ends or is truncated, reset the environment
+        # advance learning stage to debug all stages
+        if total_ep == 5:
+            env.unwrapped.set_learning_stage(2)
+        elif total_ep == 10:
+            env.unwrapped.set_learning_stage(3)
+        elif total_ep == 15:
+            env.unwrapped.set_learning_stage(4)
+
         observation, info = env.reset()
         i = 0
         total_ep_reward = 0
