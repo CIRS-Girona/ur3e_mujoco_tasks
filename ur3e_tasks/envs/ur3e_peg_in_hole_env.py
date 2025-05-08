@@ -17,6 +17,7 @@ import cv2
 from ur3e_tasks.controllers import EEFVelocityController
 from ur3e_tasks.utils import DomainRandomizer
 from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle
+from ur3e_tasks.utils.curriculum import CurriculumLearning
 
 class UR3ePegInHoleEnv(gym.Env):
 
@@ -29,7 +30,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # Define observation space
         # observation_space = [end-effector force and torque, pose of hole w.r.t. peg, joint positions]
         # force and torque limits taken from UR3e datasheet
-        self.obs_limit = np.array([60.0, 60.0, 60.0, # force limits
+        self.obs_limit = np.array([30.0, 30.0, 30.0, # force limits
                                    10.0, 10.0, 10.0, # torque limits
                                    np.inf, np.inf, np.inf, # peg position limits
                                    1.0, 1.0, 1.0, 1.0, # peg quat limits
@@ -104,6 +105,18 @@ class UR3ePegInHoleEnv(gym.Env):
         self._hole = self._arena.mjcf_model.find('body', "hole")
         self._hole_frame = self._arena.mjcf_model.find('body','hole_frame')
 
+        # Initialize visualization of intermediate point
+        self.intermediate_target = self._arena.mjcf_model.worldbody.add("body", name="intermediate_pt", mocap=True)
+        self.intermediate_target_vis = self.intermediate_target.add(
+                "geom",
+                type="sphere",
+                size=[0.01],
+                rgba=[1, 0, 0, 0.2],
+                conaffinity=0,
+                contype=0,
+                group=2
+            )
+        
         # generate model
         self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
@@ -134,14 +147,14 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # more attributes related to rewards computation
         # TODO: tune these values
-        self.reward_weights = [1.5,0.05,0.1] # [distance, action, force]
-        self.dist_threshold = 0.01 # must be very small to make sure the peg is inserted to the hole
+        self.reward_weights = [1.5,0.05,0.0] # [distance, action, force]
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
 
         self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
         self._base_position = self._physics.bind(self._base_id).xpos.copy()
 
         # attribute related to curriculum learning
+        self.curriculum = CurriculumLearning()
         self.learning_stage = 1
 
 
@@ -217,18 +230,14 @@ class UR3ePegInHoleEnv(gym.Env):
             peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
             self._peg_end_rot = peg_end_rot.reshape(3,3)
 
-            # set intermediate point: a point above the hole
-            self.intermediate_target_pos = self._hole_pos.copy()
-            if self.learning_stage <= 3:
-                offset = self._hole_rot @ np.array([0,0,0.07]).T
-            # elif self.learning_stage == 3:
-            #     offset = self._hole_rot @ np.array([0,0,0.055]).T
-            else:
-                offset = np.array([0,0,0])
-            self.intermediate_target_pos += offset
-            # visualization
-            self._target.set_mocap_pose(self._physics, position=self.intermediate_target_pos[:3], quaternion=self._hole_quat_xyzw.copy())
+            # set intermediate target position and distance threshold based on curriculum
+            self.intermediate_target_pos, self.dist_threshold = self.curriculum.set_target_point(self._hole_pos.copy(),
+                                                                                                 self._hole_rot.copy(),
+                                                                                                 self.learning_stage)   
 
+            # Update visualization of intermediate target position
+            self._physics.bind(self.intermediate_target).mocap_pos[:] = self.intermediate_target_pos
+            
 
         # reset flag
         self.i = 0
@@ -356,7 +365,8 @@ class UR3ePegInHoleEnv(gym.Env):
     def _get_reward(self,observation,action):
         ## Reward function
         # reward based on distance
-        distance = observation[13:16] - observation[6:9]
+        # distance = observation[13:16] - observation[6:9]
+        distance = self._hole_pos.copy() - self._peg_end_pos.copy()
         reward_dist = self.map_reward(distance,self.max_dist)
         # print("reward_dist = ",reward_dist)
 
@@ -372,7 +382,11 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # reward/penalty based on termination        
         # task completion is defined based on the learning stage
-        task_completed = self.check_task_completed()
+        task_completed = self.curriculum.check_task_completed(self._peg_end_pos.copy(),
+                                                              self._peg_end_rot.copy(),
+                                                              self._hole_pos.copy(),
+                                                              self._hole_rot.copy(),
+                                                              self.learning_stage)
 
         # safety violation occurs if any of the detected forces and torques exceeds the limit
         safety_violation = self.check_safety_violation(observation[:6])
@@ -458,50 +472,3 @@ class UR3ePegInHoleEnv(gym.Env):
         
         twist_w = A @ twist_b.reshape(-1,1)
         return twist_w.reshape(-1)
-    
-    def check_task_completed(self):
-        if self.learning_stage < 4:
-            # reproduce transformation matrix of peg (w.r.t. world)
-            peg_end_transform = np.block([[self._peg_end_rot,self._peg_end_pos.reshape(-1,1)],[0,0,0,1]])             
-            # align the frames bcs hole is z+ up, and peg is z+ down
-            hole_rot_inverted = self.align_hole_to_peg(self._hole_rot)
-            # compute transformation from intermediate point to peg
-            intermediate_pt_transform = np.block([[hole_rot_inverted,self.intermediate_target_pos.reshape(-1,1)],[0,0,0,1]]) 
-            intermediate_pt_to_peg_transform = np.linalg.inv(intermediate_pt_transform) @ peg_end_transform 
-            
-            peg_wrt_intermediate_pt_pos = intermediate_pt_to_peg_transform[:3,3]
-                    
-            if self.learning_stage == 1:
-                # Define success = peg reaches within a certain radius on the xy-plane of the intermediate point
-                distance_xy = np.linalg.norm(peg_wrt_intermediate_pt_pos[:2]) # xy-plane 
-                task_completed = (distance_xy < 0.09) and (abs(peg_wrt_intermediate_pt_pos[-1]) < 0.005)
-            
-            else:
-                # compute distance (in all 3 axes) to intermediate pt
-                distance_to_intermediate_pt = np.linalg.norm(peg_wrt_intermediate_pt_pos)
-
-                if self.learning_stage == 2:
-                    # Define success = peg reaches the intermediate point 
-                    task_completed = distance_to_intermediate_pt < 0.01
-
-                elif self.learning_stage == 3:
-                    # Define success = peg reaches the intermediate point and align its orientation with the hole
-                    # Compute orientation error
-                    peg_wrt_intermediate_pt_rot = intermediate_pt_to_peg_transform[:3,:3] 
-                    ori_error = quat2axisangle(mat2quat(peg_wrt_intermediate_pt_rot)) 
-                    ori_error_norm = np.linalg.norm(ori_error[:2]) # we don't care about the z axis 
-
-                    task_completed = (distance_to_intermediate_pt < 0.005) and (ori_error_norm < 0.05) 
-        else: # self.learning_stage == 4
-            # Define success = peg is successfully inserted into the hole
-            distance = np.linalg.norm(self._hole_pos - self._peg_end_pos)
-            task_completed = distance < self.dist_threshold
-
-        return task_completed
-
-
-    def align_hole_to_peg(self,rot_matrix):
-        # rotate hole frame (x,180)*(z,90)
-        rotx180 = np.array([[1,0,0],[0,-1,0],[0,0,-1]])
-        rotz90 = np.array([[0,-1,0],[1,0,0],[0,0,1]])
-        return rot_matrix @ rotx180 @ rotz90
