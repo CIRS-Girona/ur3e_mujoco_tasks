@@ -31,15 +31,20 @@ class SuccessTrackerCallback(BaseCallback):
         self.current_stage = None
         self.writer = None
 
-        self.max_learning_stage = 4
-
-        self.save_frequency = 25000 # number of timesteps between each saved model
+        self.save_frequency = 50000 # number of timesteps between each saved model
 
     def _on_training_start(self) -> None:
+        # unwrap environment to access env attributes
         env = self.training_env.envs[0]
         while hasattr(env, "env"):
             env = env.env  # unwrap Monitor and any wrappers
-        self.current_stage = getattr(env, "learning_stage")
+        self.env_unwrapped = env
+
+        # set final learning stage
+        self.max_learning_stage = getattr(getattr(self.env_unwrapped, "curriculum", None), "final_stage", None)
+
+        # create first logging data
+        self.current_stage = getattr(self.env_unwrapped, "learning_stage")
         stage_logdir = os.path.join(self.log_dir, f"stage_{self.current_stage}")
         if os.path.exists(stage_logdir): # in case of continuing training
             stage_logdir = stage_logdir + "_resume"
@@ -50,10 +55,7 @@ class SuccessTrackerCallback(BaseCallback):
         self.current_length += 1
 
         # check learning stage
-        env = self.training_env.envs[0]
-        while hasattr(env, "env"):
-            env = env.env  # unwrap Monitor and any wrappers
-        stage = getattr(env, "learning_stage", 0)
+        stage = getattr(self.env_unwrapped, "learning_stage", 0)
         # reset all history if stage has changed
         if stage != self.current_stage:
                 self.model.save(os.path.join(self.save_path, f"model_stage_{self.current_stage}.zip"))
@@ -104,23 +106,25 @@ class SuccessTrackerCallback(BaseCallback):
             if self.verbose > 0:
                 print("===========================")
                 print(f"[Stage {stage}] Ep {self.episodes_done} | Success Rate: {success_rate:.2f}% | Mean Reward: {ep_rew_mean.item():.2f} | Mean Len: {ep_len_mean:.1f}")
-                # print(f"[Stage {stage}] Ep {self.episodes_done} | Success Rate: {success_rate}% | Mean Reward: {ep_rew_mean} | Mean Len: {ep_len_mean}")
                 print("===========================")
 
             # Advance curriculum if needed
             if (success_rate >= self.next_stage_threshold) and (self.episodes_done >= self.n_episodes):
-                if hasattr(env, "learning_stage"):
-                    env.learning_stage += 1 if env.learning_stage < self.max_learning_stage else 0
-                    print(f"Advance to stage {env.learning_stage}")
+                if hasattr(self.env_unwrapped, "learning_stage"):
+                    self.env_unwrapped.learning_stage += 1 if self.env_unwrapped.learning_stage < self.max_learning_stage else 0
+                    print(f"Advance to stage {self.env_unwrapped.learning_stage}")
                 else:
                     raise AttributeError("Environment must have a 'learning_stage' attribute.")
 
         return True
 
     def _on_training_end(self) -> None:
+        # save final model
         stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final.zip")
         if os.path.exists(stage_savefile): # in case of continuing training and stage still doesn't advance at all
             stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final2.zip")
         self.model.save(stage_savefile)
+        
+        # close logger
         if self.writer:
             self.writer.close()
