@@ -78,6 +78,8 @@ env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
 stage = 1
 env.unwrapped.set_learning_stage(stage)
 
+max_learning_stage = env.unwrapped.curriculum.final_stage
+
 # Reset the environment with a specific seed for reproducibility
 observation, info = env.reset(seed=42)
 
@@ -118,8 +120,8 @@ while True:
         print(f"Average episode length = {total_ep_len/total_ep}")
         # If the episode ends or is truncated, reset the environment
         # advance learning stage to debug all stages
-        if total_ep % 5 == 0:
-            stage += 1 if stage < 6 else 0
+        if total_ep % 3 == 0:
+            stage += 1 if stage < max_learning_stage else 0
             env.unwrapped.set_learning_stage(stage)
 
         observation, info = env.reset()

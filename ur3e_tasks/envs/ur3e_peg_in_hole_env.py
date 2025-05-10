@@ -147,7 +147,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # more attributes related to rewards computation
         # TODO: tune these values
-        self.reward_weights = [1.5,0.05,0.0] # [distance, action, force]
+        self.reward_weights = [1.5,0.0,0.0] # [distance, action, force]
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
 
         self._base_id = self._arena.mjcf_model.find('body','ur3e/base')

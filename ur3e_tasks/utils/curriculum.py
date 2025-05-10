@@ -2,19 +2,21 @@ import numpy as np
 
 class CurriculumLearning:
     def __init__(self) -> None:
-        self.final_stage = 6
+        self.final_stage = 7
 
     def set_target_point(self,hole_pos,hole_rot,learning_stage):
         # set intermediate point: a point above the hole
         intermediate_target_pos = hole_pos
         if learning_stage < self.final_stage:
             if learning_stage <= 3:
-                offset = hole_rot @ np.array([0,0,0.07]).T
+                offset = np.array([0,0,0.07])
             elif learning_stage == 4:
-                offset = hole_rot @ np.array([0,0,0.055]).T
+                offset = np.array([0,0,0.055])
             elif learning_stage == 5:
-                offset = hole_rot @ np.array([0,0,0.03]).T
-            intermediate_target_pos += offset
+                offset = np.array([0,0,0.045])
+            elif learning_stage == 6:
+                offset = np.array([0,0,0.03])
+            intermediate_target_pos += hole_rot @ offset.T
         
         # set distance threshold
         if learning_stage == 1:
