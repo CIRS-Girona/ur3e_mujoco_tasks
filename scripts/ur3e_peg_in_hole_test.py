@@ -8,8 +8,7 @@ from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, q
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
-    # Optionally, you can set a maximum number of steps per episode
-    max_episode_steps=500,
+    max_episode_steps=500, # maximum number of steps per episode
 )
 
 def invert_rotation(rot_matrix):
@@ -50,9 +49,6 @@ def generate_target_vel(obs,target):
     # compute distance to intermediate target point
     distance_to_intermediate_pt = np.linalg.norm(intermediate_pt_wrt_peg_pos)
 
-    # print(f"distance_to_intermediate_pt = {distance_to_intermediate_pt}")
-    # print(f"ori_error_norm = {ori_error_norm}")
-
     # assign target and position error based on simulation state
     if (distance_to_intermediate_pt < 0.005 and ori_error_norm < 0.05) or target=="hole": # if peg end is already at the intermediate point and orientation aligns
         # compute pos error to hole instead
@@ -67,11 +63,13 @@ def generate_target_vel(obs,target):
     control_error = np.concatenate([pos_error,ori_error])
     target_vel = 1.2 * control_error
 
-    # print(f"target = {target}")
-
     # clip target vel
     limits = np.array([0.2,0.2,0.2,0.1,0.1])
     return np.clip(target_vel[:5],limits*-1,limits), target
+
+###############
+# MAIN CODE
+###############
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')

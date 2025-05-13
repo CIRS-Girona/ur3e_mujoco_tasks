@@ -12,8 +12,7 @@ import argparse
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
-    # Optionally, you can set a maximum number of steps per episode
-    max_episode_steps=250,
+    max_episode_steps=250, # maximum number of steps per episode
 )
 
 def parse_arguments():
@@ -61,12 +60,42 @@ def main():
     env.unwrapped.set_learning_stage(stage)
 
     obs, info = env.reset()
+
+    # initialize stats for logging
+    i = 0
+    total_reward = 0
+    total_ep_reward = 0
+    success_count = 0
+    total_ep = 0
+    total_ep_len = 0
+
     while True:
-        action, _states = model.predict(obs, deterministic=True)
+        i += 1
+        # generate action from policy
+        action, _ = model.predict(obs, deterministic=True)
         # print(f"action = {action}")
+        # Take a step in the environment using the chosen action
         obs, reward, terminated, truncated, info = env.step(action)
+        # Store episode reward
+        total_ep_reward += reward
+        # Check if the episode is over (terminated)
         if terminated or truncated:
+            # logging
+            total_ep += 1
+            total_reward += total_ep_reward
+            success_count += 1 if info["is_success"] else 0
+            total_ep_len += i
+            print("==================")
+            print(f"Total episode reward = {total_ep_reward}")
+            print(f"Average episode reward after {total_ep} episodes = {total_reward/total_ep}")
+            print(f"Success rate = {success_count/total_ep}")
+            print(f"Average episode length = {total_ep_len/total_ep}")
+            
+            # reset environment and episode stats
             obs, info = env.reset()
+            i = 0
+            total_ep_reward = 0
+        print("==================")
 
 if __name__ == "__main__":
     main()
