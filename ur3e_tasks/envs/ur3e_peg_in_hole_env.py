@@ -156,7 +156,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # more attributes related to rewards computation
         # TODO: tune these values
-        self.reward_weights = [1.5,0.0,0.0] # [distance, action, force]
+        self.reward_weights = [1.5,0.0,1.0] # [distance, action, force]
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
 
         # self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
@@ -407,18 +407,20 @@ class UR3ePegInHoleEnv(gym.Env):
     def _get_reward(self,observation,action):
         ## Reward function
         # reward based on distance
-        # distance = observation[13:16] - observation[6:9]
         distance = self._hole_pos.copy() - self._peg_end_pos.copy()
         reward_dist = self.map_reward(distance,self.max_dist)
-        # print("reward_dist = ",reward_dist)
 
         # reward based on magnitude of action taken
         reward_act = self.map_reward(action,self.act_limit)
-        # print("reward_act = ",reward_act)
 
         # reward based on contact force
-        reward_force = self.map_reward(observation[:6],self.obs_limit[:6])
-        # print("reward_force = ",reward_force)
+        # reward (or penalty) is a step function at the force limit
+        ee_safety_violation = np.any(np.abs(observation[:6]) >= self.obs_limit[:6])
+        if ee_safety_violation:
+            print("Contact force exceeds limit!")
+            reward_force = self.curriculum.get_force_penalty(self.learning_stage)
+        else:
+            reward_force = 0.0
 
         reward_list = [reward_dist,reward_act,reward_force]
 
@@ -430,22 +432,20 @@ class UR3ePegInHoleEnv(gym.Env):
                                                               self._hole_rot.copy(),
                                                               self.learning_stage)
 
-        # safety violation occurs if any of the detected forces and torques exceeds the limit
-        safety_violation = self.check_safety_violation(observation[:6])
-
-        success = False # flag to indicate episode is successful
+        # safety violation occurs if any of the joint torques exceeds the limit
+        safety_violation = self.check_safety_violation()
 
         # assign reward and flags
+        terminated = False
+        success = False # flag to indicate episode is successful
         if task_completed:
             reward = 100
             success = True
             terminated = True
         elif safety_violation:
             reward = -20
-            terminated = False
         else:
             reward = np.dot(self.reward_weights,reward_list) # weighted combination
-            terminated = False
 
         return reward, terminated, reward_list, success
     
@@ -475,16 +475,10 @@ class UR3ePegInHoleEnv(gym.Env):
         reward = - np.linalg.norm(vec/max)
         return reward
     
-    def check_safety_violation(self,ee_force_torque):
+    def check_safety_violation(self):
         '''
-            Returns True if safety violation occurs.
-            Safety violation is defined by one of these conditions:
-            * end-effector (or tool flange) force-torque sensor reading in any axis exceeds its limit,
-            * torque in any of the joints exceeds its limit.
+            Returns True if safety violation occurs: torque in any of the joints exceeds its limit.
         '''
-        # end-effector force-torque
-        ee_safety_violation = np.any(np.abs(ee_force_torque) >= self.obs_limit[:6])
-
         # extract joint torques
         qfrc_passive = self._physics.data.qfrc_passive # passive forces from spring-dampers and fluid dynamics
         qfrc_applied = self._physics.data.qfrc_applied # applied by the controller
@@ -494,7 +488,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
 
-        return ee_safety_violation or joint_safety_violation
+        return joint_safety_violation
     
     def convert_twist_to_world(self,twist_b):
         '''
