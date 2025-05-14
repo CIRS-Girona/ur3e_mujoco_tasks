@@ -107,7 +107,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # Initialize visualization of intermediate point
         self.intermediate_target = self._arena.mjcf_model.worldbody.add("body", name="intermediate_pt", mocap=True)
-        self.intermediate_target_vis = self.intermediate_target.add(
+        self.intermediate_target.add(
                 "geom",
                 type="sphere",
                 size=[0.01],
@@ -117,45 +117,55 @@ class UR3ePegInHoleEnv(gym.Env):
                 group=2
             )
         
-        # generate model
-        self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
+        ######################
+        
+        # # generate model
+        # self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
 
-        # store original position of hole
-        self._hole_pos_default = self._physics.bind(self._hole).xpos.copy()
-        self._hole_quat_default = self._physics.bind(self._hole).xquat.copy()
+        # # store original position of hole
+        # self._hole_pos_default = self._physics.bind(self._hole).xpos.copy()
+        # self._hole_quat_default = self._physics.bind(self._hole).xquat.copy()
 
-        # Camera 
-        self._camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "fixed_camera")
-        self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
+        # # Camera 
+        # # self._camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "fixed_camera")
+        # # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
 
-        # set up controller
-        self.joint_torque_limits = np.array([54.0,54.0,28.0,9.0,9.0,9.0])
-        self._controller = EEFVelocityController(
-            physics=self._physics,
-            joints=self._arm.joints,
-            eef_site=self._arm.eef_site,
-            min_effort=-self.joint_torque_limits,
-            max_effort=self.joint_torque_limits,
-            kv=120 # TODO: tune this parameter
-        )
+        # # set up controller
+        # self.joint_torque_limits = np.array([54.0,54.0,28.0,9.0,9.0,9.0])
+        # self._controller = EEFVelocityController(
+        #     physics=self._physics,
+        #     joints=self._arm.joints,
+        #     eef_site=self._arm.eef_site,
+        #     min_effort=-self.joint_torque_limits,
+        #     max_effort=self.joint_torque_limits,
+        #     kv=120 # TODO: tune this parameter
+        # )
 
-        # for GUI and time keeping
-        self._timestep = self._physics.model.opt.timestep
+        # # for GUI and time keeping
+        # self._timestep = self._physics.model.opt.timestep
         self._viewer = None
-        self._step_start = None
-        self.i = 0
+        # self._step_start = None
+        # self.i = 0
+
+        ######################
+
+        # compile model now if visualization is not needed
+        # (to avoid creating new physics over and over again)
+        if render_mode != "human":
+            self.compile_model()
 
         # more attributes related to rewards computation
         # TODO: tune these values
         self.reward_weights = [1.5,0.0,0.0] # [distance, action, force]
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
 
-        self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
-        self._base_position = self._physics.bind(self._base_id).xpos.copy()
+        # self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
+        # self._base_position = self._physics.bind(self._base_id).xpos.copy()
 
         # attribute related to curriculum learning
         self.curriculum = CurriculumLearning()
         self.learning_stage = 1
+        self.prev_learning_stage = 0
 
 
     def _get_obs(self) -> np.ndarray:
@@ -190,6 +200,20 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def reset(self, seed=None, options=None) -> tuple:
         super().reset(seed=seed)
+
+        # update visualization of intermediate point if learning stage change
+        if self.learning_stage != self.prev_learning_stage and self._render_mode == "human":
+            # get distance threshold to update visualization
+            self.dist_threshold = self.curriculum.get_distance_threshold(self.learning_stage)
+            # reset visualization of intermediate point
+            for geom in list(self.intermediate_target.find_all('geom')):
+                geom.size = [self.dist_threshold]
+
+            # (re-)generate physics
+            self.compile_model()
+
+            self.prev_learning_stage = self.learning_stage
+
 
         # reset physics
         with self._physics.reset_context():
@@ -231,11 +255,12 @@ class UR3ePegInHoleEnv(gym.Env):
             self._peg_end_rot = peg_end_rot.reshape(3,3)
 
             # set intermediate target position and distance threshold based on curriculum
-            self.intermediate_target_pos, self.dist_threshold = self.curriculum.set_target_point(self._hole_pos.copy(),
-                                                                                                 self._hole_rot.copy(),
-                                                                                                 self.learning_stage)   
+            self.intermediate_target_pos = self.curriculum.get_target_point(self._hole_pos.copy(),
+                                                                            self._hole_rot.copy(),
+                                                                            self.learning_stage)   
 
             # Update visualization of intermediate target position
+            self.intermediate_target = self._arena.mjcf_model.find("body","intermediate_pt")
             self._physics.bind(self.intermediate_target).mocap_pos[:] = self.intermediate_target_pos
             
 
@@ -246,6 +271,33 @@ class UR3ePegInHoleEnv(gym.Env):
         observation = self._get_obs()
         info = self._get_info()
         return observation, info
+    
+    def compile_model(self):
+        self.close()
+
+        # generate model
+        self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
+
+        # store original position of hole
+        self._hole_pos_default = self._physics.bind(self._hole).xpos.copy()
+        self._hole_quat_default = self._physics.bind(self._hole).xquat.copy()
+
+        # set up controller
+        self.joint_torque_limits = np.array([54.0,54.0,28.0,9.0,9.0,9.0])
+        self._controller = EEFVelocityController(
+            physics=self._physics,
+            joints=self._arm.joints,
+            eef_site=self._arm.eef_site,
+            min_effort=-self.joint_torque_limits,
+            max_effort=self.joint_torque_limits,
+            kv=120 # TODO: tune this parameter
+        )
+
+        # for GUI and time keeping
+        self._timestep = self._physics.model.opt.timestep
+        self._viewer = None
+        self._step_start = None
+        self.i = 0
 
     def step(self, action: np.ndarray) -> tuple:
         # flags
@@ -325,8 +377,6 @@ class UR3ePegInHoleEnv(gym.Env):
             self._viewer.cam.azimuth = -150
             self._viewer.cam.elevation = -45
             self._viewer.cam.lookat[:] = np.array([0.0, 0.0, 0.824])
-            #start rendering camera
-            # self._camera._renderer.render()
             
 
         if self._step_start is None and self._render_mode == "human":
@@ -336,14 +386,6 @@ class UR3ePegInHoleEnv(gym.Env):
         if self._render_mode == "human":
             # render viewer
             self._viewer.sync()
-            # render camera
-            if self.show_cam and self.i%10 == 0:
-                print("render cam")
-                # print(self._camera.image)
-                cv2.imshow("fixed_camera",cv2.cvtColor(self._camera.image, cv2.COLOR_RGB2BGR) )
-                cv2.imshow("hand_camera",cv2.cvtColor(self._hand_camera.image, cv2.COLOR_RGB2BGR) )
-                cv2.waitKey(1)
-                # self._camera.shoot()
 
             # TODO come up with a better frame rate keeping strategy
             time_until_next_step = self._timestep - (time.time() - self._step_start)

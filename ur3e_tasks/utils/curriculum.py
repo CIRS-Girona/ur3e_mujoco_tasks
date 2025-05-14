@@ -4,7 +4,7 @@ class CurriculumLearning:
     def __init__(self) -> None:
         self.final_stage = 7
 
-    def set_target_point(self,hole_pos,hole_rot,learning_stage):
+    def get_target_point(self,hole_pos,hole_rot,learning_stage):
         # set intermediate point: a point above the hole
         intermediate_target_pos = hole_pos
         if learning_stage < self.final_stage:
@@ -17,7 +17,10 @@ class CurriculumLearning:
             elif learning_stage == 6:
                 offset = np.array([0,0,0.03])
             intermediate_target_pos += hole_rot @ offset.T
-        
+
+        return intermediate_target_pos
+    
+    def get_distance_threshold(self,learning_stage):
         # set distance threshold
         if learning_stage == 1:
             dist_threshold = 0.09
@@ -26,10 +29,11 @@ class CurriculumLearning:
         else:
             dist_threshold = 0.01
 
-        return intermediate_target_pos, dist_threshold
+        return dist_threshold
     
     def check_task_completed(self,peg_pos,peg_rot,hole_pos,hole_rot,learning_stage):
-        intermediate_pt, dist_threshold = self.set_target_point(hole_pos,hole_rot,learning_stage)
+        intermediate_pt = self.get_target_point(hole_pos,hole_rot,learning_stage)
+        dist_threshold = self.get_distance_threshold(learning_stage)
 
         # reproduce transformation matrix of peg (w.r.t. world)
         peg_end_transform = np.block([[peg_rot,peg_pos.reshape(-1,1)],[0,0,0,1]])             
