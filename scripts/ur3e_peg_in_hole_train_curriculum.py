@@ -78,12 +78,14 @@ def main():
         # search for the last model
         for file in os.listdir(save_path):
             full_path = os.path.join(save_path, file)
-            if os.path.isfile(full_path) and 'final' in file:
+            if os.path.isfile(full_path) and 'final.zip' in file:
                 model_loadpath = full_path
+                replay_buffer_loadpath = full_path.replace(".zip",".pkl")
         # load that model
         model = alg_func.load(model_loadpath, tensorboard_log=log_path, device='cuda')
         model.verbose = 1
         model.set_env(env)
+        model.load_replay_buffer(replay_buffer_loadpath)
     else:
         model = alg_func("MlpPolicy", env, verbose=1, tensorboard_log=log_path, device='cuda')
 

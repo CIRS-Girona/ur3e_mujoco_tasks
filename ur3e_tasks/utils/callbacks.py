@@ -59,6 +59,7 @@ class SuccessTrackerCallback(BaseCallback):
         # reset all history if stage has changed
         if stage != self.current_stage:
                 self.model.save(os.path.join(self.save_path, f"model_stage_{self.current_stage}.zip"))
+                self.model.save_replay_buffer(os.path.join(self.save_path, f"model_stage_{self.current_stage}.pkl"))
                 self.writer.close()
                 self.current_stage = stage
                 self.writer = SummaryWriter(log_dir=os.path.join(self.log_dir, f"stage_{stage}"))
@@ -120,10 +121,11 @@ class SuccessTrackerCallback(BaseCallback):
 
     def _on_training_end(self) -> None:
         # save final model
-        stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final.zip")
-        if os.path.exists(stage_savefile): # in case of continuing training and stage still doesn't advance at all
-            stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final2.zip")
-        self.model.save(stage_savefile)
+        stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final")
+        if os.path.exists(stage_savefile+".zip"): # in case of continuing training and stage still doesn't advance at all
+            stage_savefile = os.path.join(self.save_path, f"model_stage_{self.current_stage}_final2")
+        self.model.save(stage_savefile+".zip")
+        self.model.save_replay_buffer(stage_savefile+".pkl")
         
         # close logger
         if self.writer:
