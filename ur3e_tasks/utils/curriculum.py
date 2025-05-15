@@ -2,7 +2,7 @@ import numpy as np
 
 class CurriculumLearning:
     def __init__(self) -> None:
-        self.final_stage = 8
+        self.final_stage = 9
 
     def get_target_point(self,hole_pos,hole_rot,learning_stage):
         # set intermediate point: a point above the hole
@@ -34,7 +34,9 @@ class CurriculumLearning:
         return dist_threshold
     
     def get_force_penalty(self,learning_stage):
-        if learning_stage == self.final_stage:
+        if learning_stage == 8:
+            return -5.0
+        elif learning_stage == 9:
             return -10.0
         else:
             return 0.0
