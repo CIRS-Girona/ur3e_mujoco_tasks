@@ -1,5 +1,5 @@
 <mujoco model="peg-in-hole">
-  <option viscosity="0.1" gravity="0.0 0.0 0.0" timestep="0.002"/>
+  <option viscosity="0.1" gravity="0.0 0.0 0.0" timestep="0.001"/>
   <option>
     <flag  multiccd="disable" warmstart="enable"/>
   </option>

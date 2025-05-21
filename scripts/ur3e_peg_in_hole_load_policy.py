@@ -23,13 +23,15 @@ def parse_arguments():
     parser.add_argument('--filename', type=str, required=True, help='The name of the file to load (NOTE: algorithm must match --algorithm)')
     parser.add_argument('--learning-stage', type=int, required=False, default=1, help='Learning stage to test (default=1)')
 
+    parser.add_argument('--num-episodes', type=int, required=False, help='Number of episodes to test (infinite if not specified)')
+
     # Parse arguments
     args = parser.parse_args()
 
-    return args.algorithm, args.filename, args.learning_stage
+    return args.algorithm, args.filename, args.learning_stage, args.num_episodes
 
 def main():
-    algorithm, filename, stage = parse_arguments()
+    algorithm, filename, stage, num_episodes = parse_arguments()
     # Create the environment with rendering in human mode
     env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
 
@@ -69,6 +71,12 @@ def main():
     total_ep = 0
     total_ep_len = 0
 
+    if num_episodes is None:
+        num_episodes = float("inf")  # infinite episodes if not specified
+
+    # variable to store max contact force
+    max_contact_force = np.zeros(6)
+
     while True:
         i += 1
         # generate action from policy
@@ -78,6 +86,12 @@ def main():
         obs, reward, terminated, truncated, info = env.step(action)
         # Store episode reward
         total_ep_reward += reward
+
+        # track max contact force
+        for j in range(6):
+            if abs(obs[j]) > abs(max_contact_force[j]):
+                max_contact_force[j] = obs[j]
+
         # Check if the episode is over (terminated)
         if terminated or truncated:
             # logging
@@ -90,12 +104,19 @@ def main():
             print(f"Average episode reward after {total_ep} episodes = {total_reward/total_ep}")
             print(f"Success rate = {success_count/total_ep}")
             print(f"Average episode length = {total_ep_len/total_ep}")
+            print(f"Max contact force = {max_contact_force}")
+
+            if total_ep >= num_episodes:
+                print("Finished testing!")
+                env.close()
+                break
             
             # reset environment and episode stats
             obs, info = env.reset()
             i = 0
             total_ep_reward = 0
-        print("==================")
+            max_contact_force = np.zeros(6)
+        # print("==================")
 
 if __name__ == "__main__":
     main()

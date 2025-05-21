@@ -122,6 +122,10 @@ while True:
             stage += 1 if stage < max_learning_stage else 0
             env.unwrapped.set_learning_stage(stage)
 
+        if total_ep >= 50: # NOTE: set number of episodes to test here!
+            env.close()
+            break
+
         observation, info = env.reset()
         i = 0
         total_ep_reward = 0
