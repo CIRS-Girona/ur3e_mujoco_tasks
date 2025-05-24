@@ -98,7 +98,7 @@ def main():
         verbose=1
     )
 
-    model.learn(total_timesteps=args.total_timesteps, callback=callback, tb_log_name="general", reset_num_timesteps=False)
+    model.learn(total_timesteps=args.total_timesteps, callback=callback, tb_log_name="general", reset_num_timesteps=False, progress_bar=True)
 
 if __name__ == "__main__":
     main()

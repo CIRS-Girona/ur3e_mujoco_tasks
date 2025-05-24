@@ -16,7 +16,7 @@ import cv2
 
 from ur3e_tasks.controllers import EEFVelocityController
 from ur3e_tasks.utils import DomainRandomizer
-from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle
+from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, quat2mat, axisangle2quat
 from ur3e_tasks.utils.curriculum import CurriculumLearning
 
 class UR3ePegInHoleEnv(gym.Env):
@@ -159,13 +159,13 @@ class UR3ePegInHoleEnv(gym.Env):
         self.reward_weights = [1.5,0.0,1.0] # [distance, action, force]
         self.max_dist = [0.6,0.6,0.5] # xy taken from arena size, z taken from max reach of UR3e
 
-        # self._base_id = self._arena.mjcf_model.find('body','ur3e/base')
-        # self._base_position = self._physics.bind(self._base_id).xpos.copy()
-
         # attribute related to curriculum learning
         self.curriculum = CurriculumLearning()
         self.learning_stage = 1
         self.prev_learning_stage = 0
+
+        # attribute related to hole position noise
+        self.pos_noise = 0.003
 
 
     def _get_obs(self) -> np.ndarray:
@@ -173,23 +173,27 @@ class UR3ePegInHoleEnv(gym.Env):
         sensor_force = self._physics.data.sensor('ur3e/ee_force').data.copy()
         sensor_torque = self._physics.data.sensor('ur3e/ee_torque').data.copy()
         
-        ## position and orientation of peg (w.r.t. world)
+        ## position and orientation of peg (w.r.t. robot base)
         self._peg_end_pos = self._physics.bind(self._peg_end).xpos.copy()
 
         peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
         self._peg_end_rot = peg_end_rot.reshape(3,3)
 
-        peg_end_quat = self._physics.bind(self._peg_end).xquat.copy() #wxyz
+        # peg_end_quat = self._physics.bind(self._peg_end).xquat.copy() #wxyz
+
+        self._peg_end_pos_base, self._peg_end_quat_base = self.convert_to_base_frame(pos=self._peg_end_pos.copy(),
+                                                                                     rot = self._peg_end_rot.copy(),
+                                                                                     return_quat=True)
 
         ## joint positions
         joint_pos = self._physics.data.qpos.copy()
 
         return np.concatenate((sensor_force, 
                                sensor_torque, 
-                               self._peg_end_pos,
-                               peg_end_quat,
-                               self._hole_pos,
-                               self._hole_quat,
+                               self._peg_end_pos_base,
+                               self._peg_end_quat_base,
+                               self._hole_pos_base_obs,
+                               self._hole_quat_base,
                                joint_pos))
 
     def _get_info(self) -> dict:
@@ -200,6 +204,8 @@ class UR3ePegInHoleEnv(gym.Env):
 
     def reset(self, seed=None, options=None) -> tuple:
         super().reset(seed=seed)
+        if seed is not None:
+            self._randomizer.set_seed(seed)
 
         # update visualization of intermediate point if learning stage change
         if self.learning_stage != self.prev_learning_stage and self._render_mode == "human":
@@ -241,10 +247,34 @@ class UR3ePegInHoleEnv(gym.Env):
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy() 
             self._hole_rot = self._physics.bind(self._hole_frame).xmat.copy()
             self._hole_rot = self._hole_rot.reshape(3,3)
+            # self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
+            # self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
 
-            # NECESSARY FOR TESTING WITH POSITION CONTROLLER
-            self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
-            self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
+            # transform hole frame pose from world frame to robot base frame
+            self._hole_pos_base, self._hole_quat_base = self.convert_to_base_frame(pos=self._hole_pos.copy(),
+                                                                                  rot=self._hole_rot.copy(),
+                                                                                  return_quat=True)
+            
+            # add position noise to the hole
+            if self.curriculum.generate_noise_flag(self.learning_stage):
+                pos_noise = self.generate_position_noise(self.pos_noise)
+                self._hole_pos_obs = self._hole_pos.copy() + self._hole_rot @ pos_noise
+                # convert to robot base frame
+                self._hole_pos_base_obs, _ = self.convert_to_base_frame(pos=self._hole_pos_obs.copy(),
+                                                                    rot=self._hole_rot.copy())
+            else:
+                self._hole_pos_obs = self._hole_pos.copy()
+                self._hole_pos_base_obs = self._hole_pos_base.copy()
+
+            ######################################################
+            # # debugging
+            print("hole_pos", self._hole_pos)
+            # print("pos_noise", pos_noise)
+            print("hole_pos_obs", self._hole_pos_obs)
+
+            print("hole_pos_base", self._hole_pos_base)
+            print("hole_pos_base_obs", self._hole_pos_base_obs)
+            ######################################################
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
@@ -323,7 +353,7 @@ class UR3ePegInHoleEnv(gym.Env):
             if self._render_mode == "human":
                 self._render_frame()
 
-        print("i = ", self.i)
+        # print("i = ", self.i)
         
         # get observation
         observation = self._get_obs()
@@ -331,9 +361,9 @@ class UR3ePegInHoleEnv(gym.Env):
         ## Reward function
         reward, terminated, reward_list, success = self._get_reward(observation,action)
 
-        print(f"action = {action}")
+        # print(f"action = {action}")
         print(f"observation = {observation}")
-        print(f"reward = {reward}")
+        # print(f"reward = {reward}")
         
         info = {
             "learning_stage":self.learning_stage,
@@ -377,6 +407,10 @@ class UR3ePegInHoleEnv(gym.Env):
             self._viewer.cam.azimuth = -150
             self._viewer.cam.elevation = -45
             self._viewer.cam.lookat[:] = np.array([0.0, 0.0, 0.824])
+
+            # --- Enable contact point and force visualization ---
+            self._viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTPOINT] = True
+            self._viewer.opt.flags[mujoco.mjtVisFlag.mjVIS_CONTACTFORCE] = True
             
 
         if self._step_start is None and self._render_mode == "human":
@@ -417,7 +451,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # reward (or penalty) is a step function at the force limit
         ee_safety_violation = np.any(np.abs(observation[:6]) >= self.obs_limit[:6])
         if ee_safety_violation:
-            print("Contact force exceeds limit!")
+            print(f"Contact force exceeds limit! {observation[:6]}")
             reward_force = self.curriculum.get_force_penalty(self.learning_stage)
         else:
             reward_force = 0.0
@@ -466,9 +500,11 @@ class UR3ePegInHoleEnv(gym.Env):
         '''
             Normalize vec based on max value, and assign negative reward.
             In general, higher value on vec means lower reward.
-            Arguments:
+            
+            Args:
                 vec: observation/action to be mapped
                 max: max value for the vec
+            
             Returns:
                 reward (always negative)
         '''
@@ -484,7 +520,7 @@ class UR3ePegInHoleEnv(gym.Env):
         qfrc_applied = self._physics.data.qfrc_applied # applied by the controller
 
         total_joint_torques = qfrc_passive + qfrc_applied
-        print(f"total joint torques = {total_joint_torques}")        
+        # print(f"total joint torques = {total_joint_torques}")        
 
         joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
 
@@ -493,8 +529,10 @@ class UR3ePegInHoleEnv(gym.Env):
     def convert_twist_to_world(self,twist_b):
         '''
             Convert twist from peg frame to world frame.
-            Arguments:
+            
+            Args:
                 twist_b: (ndarray) twist in peg frame.
+            
             Returns:
                 twist expressed in world frame.
         '''
@@ -508,3 +546,62 @@ class UR3ePegInHoleEnv(gym.Env):
         
         twist_w = A @ twist_b.reshape(-1,1)
         return twist_w.reshape(-1)
+    
+    def generate_position_noise(self,distance):
+        '''
+            Generate noise to the hole position (to be compounded with the original position).
+            
+            Args:
+                distance: (float) radius of noise to be added.
+            
+            Returns:
+                offset: (ndarray) noise to be added to the hole position.
+        '''
+        random_angle = np.random.uniform(0, 2 * np.pi)
+        offset = np.array([
+            distance * np.cos(random_angle),
+            distance * np.sin(random_angle),
+            0.0
+        ])
+        return offset
+    
+    def convert_to_base_frame(self,pos,rot=None,quat=None,return_quat=False):
+        '''
+            Convert pose from world frame to robot base frame.
+            Orientation can be given in either rotation matrix or quaternion form (but not both).
+            
+            Args:
+                pos: (ndarray) position w.r.t. world frame
+                rot: (ndarray) 3x3 rotation matrix indicating orientation w.r.t. world frame.
+                quat: (ndarray) quaternion in xyzw format indicating orientation w.r.t. world frame.
+                return_quat: (bool) if True, orientation is returned in quaternion (xyzw format); otherwise, orientation is returned in 3x3 rotation matrix.
+            
+            Returns:
+                position and orientation w.r.t. robot base frame.
+        '''
+        assert (rot is None and quat is not None) or (rot is not None and quat is None), "Between rot and quat, only 1 can be given"
+
+        # access transformation from world to robot base
+        base_id = self._arena.mjcf_model.find('body','ur3e/base')
+        base_pos = self._physics.bind(base_id).xpos.copy()
+        base_rot = self._physics.bind(base_id).xmat.copy()
+        base_rot = base_rot.reshape(3,3)
+        base_transform = np.block([[base_rot,base_pos.reshape(-1,1)],[0,0,0,1]])
+
+        # construct transformation of the given pose w.r.t. world
+        if quat is not None:
+            rot = quat2mat(quat)
+        pose_transform = np.block([[rot,pos.reshape(-1,1)],[0,0,0,1]])
+
+        # compound transformation
+        pose_transform_base = np.linalg.inv(base_transform) @ pose_transform
+
+        # extract position and rotation
+        pos_wrt_base = pose_transform_base[:3,3]
+        rot_wrt_base = pose_transform_base[:3,:3]
+
+        if return_quat:
+            quat_wrt_base = mat2quat(rot_wrt_base)
+            return pos_wrt_base,quat_wrt_base
+        else:
+            return pos_wrt_base,rot_wrt_base

@@ -34,12 +34,16 @@ class CurriculumLearning:
         return dist_threshold
     
     def get_force_penalty(self,learning_stage):
-        if learning_stage == 8:
+        if learning_stage == 9:
             return -0.5
-        elif learning_stage == 9:
-            return -1.0
         else:
             return 0.0
+        
+    def generate_noise_flag(self,learning_stage):
+        if learning_stage >= 8:
+            return True
+        else:
+            return False
     
     def check_task_completed(self,peg_pos,peg_rot,hole_pos,hole_rot,learning_stage):
         intermediate_pt = self.get_target_point(hole_pos,hole_rot,learning_stage)

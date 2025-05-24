@@ -19,11 +19,11 @@ def invert_rotation(rot_matrix):
 
 def generate_target_vel(obs,target):
     peg_end_pos = obs[6:9]
-    peg_end_quat = obs[9:13] #wxyz
-    peg_end_rot = quat2mat([peg_end_quat[1], peg_end_quat[2], peg_end_quat[3], peg_end_quat[0]])
+    peg_end_quat = obs[9:13] #xyzw
+    peg_end_rot = quat2mat(peg_end_quat)
     hole_pos = obs[13:16]
-    hole_quat = obs[16:20] #wxyz
-    hole_rot = quat2mat([hole_quat[1], hole_quat[2], hole_quat[3], hole_quat[0]])
+    hole_quat = obs[16:20] #xyzw
+    hole_rot = quat2mat(hole_quat)
 
     # set intermediate target position (above the hole)
     offset = hole_rot @ np.array([0,0,0.07]).T

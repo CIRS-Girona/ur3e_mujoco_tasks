@@ -24,14 +24,18 @@ def parse_arguments():
     parser.add_argument('--learning-stage', type=int, required=False, default=1, help='Learning stage to test (default=1)')
 
     parser.add_argument('--num-episodes', type=int, required=False, help='Number of episodes to test (infinite if not specified)')
+    parser.add_argument('--seed', type=int, required=False, help='Random seed for reproducibility')
 
     # Parse arguments
     args = parser.parse_args()
 
-    return args.algorithm, args.filename, args.learning_stage, args.num_episodes
+    # return args.algorithm, args.filename, args.learning_stage, args.num_episodes
+    return args
 
 def main():
-    algorithm, filename, stage, num_episodes = parse_arguments()
+    # algorithm, filename, stage, num_episodes = parse_arguments()
+    args = parse_arguments()
+
     # Create the environment with rendering in human mode
     env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
 
@@ -40,12 +44,12 @@ def main():
     FILE_DIR = Path(__file__).parent /'..' / 'models'
     # Make sure the directory exists
     os.makedirs(FILE_DIR, exist_ok=True)
-    file_path = os.path.join(FILE_DIR,filename)
+    file_path = os.path.join(FILE_DIR,args.filename)
 
     # instantiate and train model
-    if algorithm == 'SAC':
+    if args.algorithm == 'SAC':
         alg_func = SAC
-    elif algorithm == 'TD3':
+    elif args.algorithm == 'TD3':
         alg_func = TD3
     else:
         raise "Algorithm is not valid!"
@@ -59,9 +63,9 @@ def main():
         raise "Error loading model!"
     
     # set environment learning stage
-    env.unwrapped.set_learning_stage(stage)
+    env.unwrapped.set_learning_stage(args.learning_stage)
 
-    obs, info = env.reset()
+    obs, info = env.reset(seed=args.seed)
 
     # initialize stats for logging
     i = 0
@@ -71,6 +75,7 @@ def main():
     total_ep = 0
     total_ep_len = 0
 
+    num_episodes = args.num_episodes
     if num_episodes is None:
         num_episodes = float("inf")  # infinite episodes if not specified
 

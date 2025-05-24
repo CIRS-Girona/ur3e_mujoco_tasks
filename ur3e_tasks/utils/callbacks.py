@@ -106,7 +106,7 @@ class SuccessTrackerCallback(BaseCallback):
 
             if self.verbose > 0:
                 print("===========================")
-                print(f"[Stage {stage}] Ep {self.episodes_done} | Success Rate: {success_rate:.2f}% | Mean Reward: {ep_rew_mean.item():.2f} | Mean Len: {ep_len_mean:.1f}")
+                print(f"[Stage {stage}] Ep {self.episodes_done} | Success Rate: {success_rate:.2f} | Mean Reward: {ep_rew_mean.item():.2f} | Mean Len: {ep_len_mean:.1f}")
                 print("===========================")
 
             # Advance curriculum if needed

@@ -612,3 +612,10 @@ class DomainRandomizer:
         quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/20,-np.pi/20)
 
         return quat
+    
+    def set_seed(self,seed):
+        """
+        Set the random seed for reproducibility.
+        """
+        np.random.seed(seed)
+        random.seed(seed)
