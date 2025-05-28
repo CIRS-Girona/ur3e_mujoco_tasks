@@ -3,3 +3,5 @@ __pycache__/
 ur3e_tasks.egg-info/*
 log/
 models/
+*.zip
+*.pkl
