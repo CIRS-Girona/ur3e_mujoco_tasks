@@ -35,7 +35,7 @@ class CurriculumLearning:
     
     def get_force_penalty(self,learning_stage):
         if learning_stage == 9:
-            return -0.5
+            return -0.05
         else:
             return 0.0
         

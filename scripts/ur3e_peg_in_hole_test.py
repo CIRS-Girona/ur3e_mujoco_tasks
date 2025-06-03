@@ -8,7 +8,7 @@ from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, q
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
-    max_episode_steps=500, # maximum number of steps per episode
+    max_episode_steps=250, # maximum number of steps per episode
 )
 
 def invert_rotation(rot_matrix):
@@ -64,7 +64,7 @@ def generate_target_vel(obs,target):
     target_vel = 1.2 * control_error
 
     # clip target vel
-    limits = np.array([0.2,0.2,0.2,0.1,0.1])
+    limits = np.array([0.1,0.1,0.1,0.1,0.1])
     return np.clip(target_vel[:5],limits*-1,limits), target
 
 ###############
@@ -73,13 +73,17 @@ def generate_target_vel(obs,target):
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
-stage = 1
+stage = 9
 env.unwrapped.set_learning_stage(stage)
 
 max_learning_stage = env.unwrapped.curriculum.final_stage
 
 # Reset the environment with a specific seed for reproducibility
 observation, info = env.reset(seed=42)
+
+print("info = ")
+for key in info.keys():
+    print(f"{key}: {info[key]}")
 
 # Run simulation for a fixed number of steps
 # for _ in range(1000):
@@ -127,10 +131,13 @@ while True:
             break
 
         observation, info = env.reset()
+        print("info = ")
+        for key in info.keys():
+            print(f"{key}: {info[key]}")
         i = 0
         total_ep_reward = 0
         target = "intermediate"
-    print("==================")
+    # print("==================")
 
 # Close the environment when the simulation is done
 env.close()

@@ -73,8 +73,10 @@ class SuccessTrackerCallback(BaseCallback):
 
         # save checkpoint models
         if self.logging_timestep % self.save_frequency == 0:
-            checkpoint_filename = f"model_stage_{self.current_stage}_step_{self.logging_timestep}.zip"
-            self.model.save(os.path.join(self.save_path, checkpoint_filename))
+            checkpoint_filename = os.path.join(self.save_path, f"model_stage_{self.current_stage}_step_{self.logging_timestep}.zip")
+            if os.path.exists(checkpoint_filename): # in case of continuing training and stage still doesn't advance
+                checkpoint_filename = os.path.join(self.save_path, f"model_stage_{self.current_stage}_resume_step_{self.logging_timestep}.zip")
+            self.model.save(checkpoint_filename)
 
         if self.locals["dones"]:
             # Get info and success

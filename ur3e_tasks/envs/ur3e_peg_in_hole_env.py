@@ -46,7 +46,8 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # Define action space
         # action_space = [vx, vy, vz, wx, wy] defined in the world frame
-        self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
+        # self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
+        self.act_limit = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
         self.action_space = spaces.Box(
             low=-self.act_limit, 
             high=self.act_limit, 
@@ -165,7 +166,7 @@ class UR3ePegInHoleEnv(gym.Env):
         self.prev_learning_stage = 0
 
         # attribute related to hole position noise
-        self.pos_noise = 0.003
+        self.pos_noise = 0.005
 
 
     def _get_obs(self) -> np.ndarray:
@@ -267,13 +268,13 @@ class UR3ePegInHoleEnv(gym.Env):
                 self._hole_pos_base_obs = self._hole_pos_base.copy()
 
             ######################################################
-            # # debugging
-            print("hole_pos", self._hole_pos)
-            # print("pos_noise", pos_noise)
-            print("hole_pos_obs", self._hole_pos_obs)
+            # # # debugging
+            # print("hole_pos", self._hole_pos)
+            # # print("pos_noise", pos_noise)
+            # print("hole_pos_obs", self._hole_pos_obs)
 
-            print("hole_pos_base", self._hole_pos_base)
-            print("hole_pos_base_obs", self._hole_pos_base_obs)
+            # print("hole_pos_base", self._hole_pos_base)
+            # print("hole_pos_base_obs", self._hole_pos_base_obs)
             ######################################################
             
             # reset gravity back to normal
@@ -345,7 +346,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
-        for _ in range(20):
+        for _ in range(25):
             self._controller.run(target_vel)
             # step physics
             self._physics.step()
@@ -362,7 +363,7 @@ class UR3ePegInHoleEnv(gym.Env):
         reward, terminated, reward_list, success = self._get_reward(observation,action)
 
         # print(f"action = {action}")
-        print(f"observation = {observation}")
+        # print(f"observation = {observation}")
         # print(f"reward = {reward}")
         
         info = {
