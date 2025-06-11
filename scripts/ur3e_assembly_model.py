@@ -28,15 +28,15 @@ register(
 )
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3eAssemblyEnv-v0', render_mode='human')
-
+torch.cuda.empty_cache()
 # Model
 # model = UR3EBCModel()
-# model = UR3EBCRNNModel(True)
+model = UR3EBCRNNModel(True)
 # model = UR3EBC3DModel("mc")
-model = UR3EBC3DModelModified("mc")
+# model = UR3EBC3DModelModified("mc")
 # model = UR3EFuseEarlyModel("mc")
 model = model.to("cuda")
-model_path = "/home/students/ur3e_behavioural_cloning/runs/dagger/3d_mc_pose_separate_realign_continue_dagger_3_20250503_030531.pth"
+model_path = "/home/students/ur3e_behavioural_cloning/runs/vanilla_final_20250610_170211.pth"
 # model_path = "/home/students/ur3e_behavior_cloning/runs/model_20250409_224215.pth"
 model = load_model(model,model_path)
 
@@ -63,8 +63,8 @@ while True:
     # Choose a random action from the available action space
     # action = env.action_space.sample()
     action,hole,state = env.unwrapped.get_action_model(observation)
-    # action_exp,state_exp,_, terminated_exp = env.unwrapped.get_action_bt() # expert
-    action = action 
+    action_exp,state_exp,_, terminated_exp = env.unwrapped.get_action_bt() # expert
+    action = action
 
     # print("Action expert : {}".format(action_exp))
     # print("Action : {}".format(action))

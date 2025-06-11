@@ -1,3 +1,3 @@
 from ur3e_tasks.utils.domain_randomizer import DomainRandomizer
 from ur3e_tasks.utils.assembly_behavior import AssemblyBT
-
+from ur3e_tasks.utils.assembly_behavior_result import AssemblyBTResult

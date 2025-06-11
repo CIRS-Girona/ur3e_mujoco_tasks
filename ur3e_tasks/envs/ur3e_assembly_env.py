@@ -10,7 +10,7 @@ from ur3e_tasks.arenas import AssemblyArena
 from ur3e_tasks.robots import Suction, RT2F85
 
 from ur3e_tasks.utils import  DomainRandomizer
-from ur3e_tasks.utils import  AssemblyBT
+from ur3e_tasks.utils import  AssemblyBT, AssemblyBTResult
 
 from manipulator_mujoco.mocaps import Target
 from manipulator_mujoco.controllers import OperationalSpaceController
@@ -215,23 +215,24 @@ class UR3eAssemblyEnv(gym.Env):
         self.i = 0
         self.obs_list = []
         # domain randomize
+        init_pose = None
         if self.random_domain:
             hole_pos = self._randomizer.random_object_in_ws("hole")
-            self._randomizer.random_texture("table_top")
-            self._randomizer.random_texture("wall_left")
-            self._randomizer.random_texture("wall_right")
-            self._randomizer.random_texture("wall_back")
-            self._randomizer.random_texture("wall_front")
-            self._randomizer.random_light("light_source")
-            self._randomizer.random_object_color("hole")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
-            self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
-            self._randomizer.random_arm_height("ur3e/base")
-            self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
-            self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
-            self._randomizer.random_distractors()
-            self._randomizer.random_texture_arm(self._arm)
-            init_pose = self._randomizer.random_initial_position(hole_pos.copy())
+            # self._randomizer.random_texture("table_top")
+            # self._randomizer.random_texture("wall_left")
+            # self._randomizer.random_texture("wall_right")
+            # self._randomizer.random_texture("wall_back")
+            # self._randomizer.random_texture("wall_front")
+            # self._randomizer.random_light("light_source")
+            # self._randomizer.random_object_color("hole")
+            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee")
+            # self._randomizer.random_object_color("ur3e/assembly_ee/peg_ee_base")
+            # self._randomizer.random_arm_height("ur3e/base")
+            # self._randomizer.random_fixed_camera("fixed_camera1","camera_center1")
+            # self._randomizer.random_fixed_camera("fixed_camera2","camera_center2")
+            # self._randomizer.random_distractors()
+            # self._randomizer.random_texture_arm(self._arm)
+            # init_pose = self._randomizer.random_initial_position(hole_pos.copy())
             self._random_state = self._randomizer.get_random_state()
             
             if self.random_once == True:
@@ -265,7 +266,7 @@ class UR3eAssemblyEnv(gym.Env):
         # # find initial arm position
         # init_pos = self._randomizer.get_random_ws_pos_clearance(self._physics.bind(self._hole).xpos.copy(), 0.3)
         # init_quat = self._randomizer.random_quaternion_around_axis([0, 0, 0, 1],['x','y','z'], np.pi/8)
-        if self.random_domain:
+        if self.random_domain and init_pose is not None:
             # print("Init Pose: {}".format(init_pose))
             # time.sleep(50)
             self._target.set_mocap_pose(self._physics, position=init_pose[:3], quaternion=init_pose[3:])
@@ -287,7 +288,7 @@ class UR3eAssemblyEnv(gym.Env):
                 
 
                 # random initial position
-                if self.random_domain:
+                if self.random_domain and init_pose is not None:
                     vel_cmd = self._controller.cal_vel_from_target(target_pose,2,3)
                     self._controller.run(vel_cmd)
 
@@ -470,12 +471,14 @@ class UR3eAssemblyEnv(gym.Env):
 
         # set up behavior
         self._bt = AssemblyBT(self._physics,self._arm.eef_site,self._hole)
+        self._bt_result = AssemblyBTResult(self._physics,self._arm.eef_site,self._hole)
 
         # for GUI and time keeping
         self._viewer = None
         self._timestep = self._physics.model.opt.timestep
         self._step_start = None
         self.i = 0
+        self.frames_buffer = []
         print("Finish Compiling")
 
     def set_replay(self, replay,random_state):
@@ -516,6 +519,10 @@ class UR3eAssemblyEnv(gym.Env):
 
         return vel_cmd,  state, success, terminated
     
+    def get_action_bt_result(self):
+        cmd, state, success, terminated = self._bt_result.run()
+        return state
+    
     def get_action_replay(self):
         if self.i > len(self._vel_replay)-1:
             vel_cmd = np.zeros(6)
@@ -543,7 +550,7 @@ class UR3eAssemblyEnv(gym.Env):
             base = self._arena.mjcf_model.find('body', "ur3e/base")
             hole_pose_w = self.pose_in_world(np.array(hole_pose.to("cpu")).reshape(7),base)
 
-            self._target.set_mocap_pose(self._physics, position=hole_pose_w[:3], quaternion=hole_pose_w [3:])
+            # self._target.set_mocap_pose(self._physics, position=hole_pose_w[:3], quaternion=hole_pose_w [3:])
         # print(np.array(vel).reshape(6))
             self.pred_vel, self.pred_pose, self.pred_state = np.array(vel.to("cpu")).reshape(6), np.array(hole_pose.to("cpu")).reshape(7), torch.argmax(est_state.to("cpu"))
         
@@ -754,6 +761,8 @@ class UR3eAssemblyEnv(gym.Env):
             """
             # img = np.transpose(img, (1, 2, 0))  # Convert [f, H, W, C] -> [H, W, f, C] -> [H, W, C]
             img = np.clip(img * 255, 0, 255).astype(np.uint8)  # Convert back to 0-255 for display
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
             return img  # Return as H, W, C
 
         # Process each camera's image and time step (f=3)

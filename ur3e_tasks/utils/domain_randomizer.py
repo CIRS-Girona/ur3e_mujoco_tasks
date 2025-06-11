@@ -47,7 +47,7 @@ class DomainRandomizer:
         pos = self.get_random_ws_pos()
         # random object orientation
         quat = self.default_value[object_name+"_body"].copy()
-        quat = self.random_quaternion_around_axis(quat, ['x'],np.pi/2,-np.pi/2 )
+        quat = self.random_quaternion_around_axis(quat, ['x'],np.pi/2.1,-np.pi/2.1 )
         # quat = self.random_quaternion_around_axis(quat, ['y'],np.pi/18,0)
         # quat = self.random_quaternion_around_axis(quat, ['z'],np.pi/18,-np.pi/18)
 

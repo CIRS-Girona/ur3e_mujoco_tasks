@@ -16,16 +16,16 @@
    <!-- table top is @ 1 m -->
     <body name="hole" pos="0.4 0.15 1.05" quat="1 0 0 0" mocap="true">
       <geom name="interactive_geom" type="box" pos="0.0 0.0 0.02" size="0.01 0.01  0.01" material="hole" group="5"  conaffinity="0" contype="0" />
-      <body name="down" pos="-0.00 -0.04 0.0" quat="1 0 0 0">
+      <body name="down" pos="-0.00 -0.042 0.0" quat="1 0 0 0">
         <geom name="down_geom" type="box" size="0.04 0.02  0.005" material="hole"/>
       </body>
-      <body name="left" pos="-0.045 0 0.0" quat="1 0 0 0">
+      <body name="left" pos="-0.0468 0 0.0" quat="1 0 0 0">
         <geom name="left_geom" type="box" size="0.01 0.06 0.005" material="hole"/>
       </body>
-      <body name="top" pos="0.0 0.04 0.0" quat="1 0 0 0">
+      <body name="top" pos="0.0 0.042 0.0" quat="1 0 0 0">
         <geom name="top_geom" type="box" size="0.04 0.02 0.005" material="hole"/>
       </body>
-      <body name="right" pos="0.045 0 0.0" quat="1 0 0 0">
+      <body name="right" pos="0.0468 0 0.0" quat="1 0 0 0">
         <geom name="right_geom" type="box" size="0.01 0.06 0.005" material="hole"/>
       </body>
         <site name="hole_site" pos="0 0 -0.03" size="0.01" rgba="0.5 0.0 0.0 0.3" group="5"/>

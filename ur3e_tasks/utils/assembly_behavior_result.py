@@ -102,7 +102,7 @@ class SetUp(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("eef", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("hole", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("command", access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("state_result", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("update_period", access=py_trees.common.Access.WRITE)
@@ -115,7 +115,6 @@ class SetUp(py_trees.behaviour.Behaviour):
         self.blackboard.hole = hole
 
         self.blackboard.command = None
-        self.blackboard.state = 0
         self.blackboard.success = False
         self.blackboard.terminate = False
         self.blackboard.update_period = update_period
@@ -129,8 +128,9 @@ class SetUp(py_trees.behaviour.Behaviour):
 
     def initialise(self):
         self.logger.debug("  %s [SetUp::initialise()]" % self.name)
-        self.blackboard.state = self.name
         self.counter = 0
+        self.blackboard.state_result = 0
+
 
     def update(self):
         return py_trees.common.Status.SUCCESS
@@ -152,7 +152,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("hole", access=py_trees.common.Access.READ)
         self.blackboard.register_key("update_period", access=py_trees.common.Access.READ)
         self.blackboard.register_key("command", access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("state_result", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("dagger", access=py_trees.common.Access.READ)
@@ -169,14 +169,14 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         self.max_counter = 999999999
 
         self.close_counter = 0
-        self.close_threshold = 2 # 50
+        self.close_threshold = 30 # 50
 
     def setup(self):
         self.logger.debug("  %s [MoveToHole::setup()]" % self.name)
 
     def initialise(self):
         self.logger.debug("  %s [MoveToHole::initialise()]" % self.name)
-        self.blackboard.state = 0
+        self.blackboard.state_result = 0
         self.counter = 0
         hole_pos = self.physics.bind(self.hole).xpos.copy()
         hole_quat = mat2quat(self.physics.bind(self.hole).xmat.reshape(3, 3))
@@ -200,7 +200,7 @@ class MoveToHole(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pose, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose,xy_thes=0.085,z_thes=0.1,ang_thes=0.08) :
+        if are_close(self.hole_pose,eef_pose,xy_thes=0.035,z_thes=0.1,ang_thes=0.3) :
             if self.close_counter >=self.close_threshold:
                 self.close_counter = 0
                 self.logger.debug("MoveToHole SUCCESS!!!")
@@ -227,7 +227,7 @@ class Assemble(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("update_period", access=py_trees.common.Access.READ)
 
         self.blackboard.register_key("command", access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("state_result", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
 
@@ -247,7 +247,7 @@ class Assemble(py_trees.behaviour.Behaviour):
 
     def initialise(self):
         self.logger.debug("  %s [Assemble::initialise()]" % self.name)
-        self.blackboard.state = 1
+        self.blackboard.state_result = 1
         self.counter = 0
         hole_pos = self.physics.bind(self.hole).xpos.copy()
         hole_pos[2] = hole_pos[2] + self.offset
@@ -261,7 +261,7 @@ class Assemble(py_trees.behaviour.Behaviour):
             self.logger.debug(f"  {self.name}: Timeout exceeded")
             self.blackboard.success = False
             self.blackboard.terminate = True
-            return py_trees.common.Status.FAILURE
+            return py_trees.common.Status.RUNNING
         
        
 
@@ -269,7 +269,10 @@ class Assemble(py_trees.behaviour.Behaviour):
         eef_quat = mat2quat(self.physics.bind(self.eef).xmat.reshape(3, 3))
         eef_pose = np.concatenate([eef_pos, eef_quat])
 
-        if are_close(self.hole_pose,eef_pose,z_thes=0.022,xy_thes=0.04,ang_thes=0.12) :
+        if are_close(self.hole_pose,eef_pose,z_thes=0.043,xy_thes=0.05,ang_thes=0.1) :
+            self.blackboard.state_result = 2
+
+        if are_close(self.hole_pose,eef_pose,z_thes=0.012,xy_thes=0.03,ang_thes=0.1) :
             self.logger.debug("Assemble SUCCESS!!!")
             return py_trees.common.Status.SUCCESS
         elif not are_close(self.hole_pose,eef_pose,z_thes=0.2,xy_thes=0.011,ang_thes=0.017) :
@@ -282,7 +285,7 @@ class Assemble(py_trees.behaviour.Behaviour):
             return py_trees.common.Status.RUNNING
         else:
             self.blackboard.command = [self.hole_pose,self.vel_lim,self.ang_vel_lim]
-            return py_trees.common.Status.FAILURE
+            return py_trees.common.Status.RUNNING
 
     def terminate(self, new_status):
         self.logger.debug("  %s [Assemble::terminate().terminate()][%s->%s]" %
@@ -298,7 +301,7 @@ class Rotate(py_trees.behaviour.Behaviour):
         self.blackboard.register_key("update_period", access=py_trees.common.Access.READ)
 
         self.blackboard.register_key("command", access=py_trees.common.Access.WRITE)
-        self.blackboard.register_key("state", access=py_trees.common.Access.WRITE)
+        self.blackboard.register_key("state_result", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("success", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("terminate", access=py_trees.common.Access.WRITE)
         self.blackboard.register_key("dagger", access=py_trees.common.Access.READ)
@@ -319,7 +322,7 @@ class Rotate(py_trees.behaviour.Behaviour):
 
     def initialise(self):
         self.logger.debug("  %s [Rotate::initialise()]" % self.name)
-        self.blackboard.state = 2
+        self.blackboard.state_result = 3
         self.counter = 0
 
         eef_pos = self.physics.bind(self.eef).xpos.copy()
@@ -342,10 +345,11 @@ class Rotate(py_trees.behaviour.Behaviour):
         eef_pose = np.concatenate([eef_pos, eef_quat])
 
 
-        if are_close(self.rotated_pose,eef_pose,ang_thes=0.05):
+        if are_close(self.rotated_pose,eef_pose,ang_thes=0.3,xy_thes=0.05,z_thes=0.05) :
             self.logger.debug("Rotate SUCCESS!!!")
             self.blackboard.success = True
             self.blackboard.terminate = True
+            self.blackboard.state_result = 4
             if self.blackboard.dagger:
                 self.blackboard.command = [self.rotated_pose,self.vel_lim,self.ang_vel_lim]
                 return py_trees.common.Status.RUNNING
@@ -361,7 +365,7 @@ class Rotate(py_trees.behaviour.Behaviour):
 
 
 
-class AssemblyBT:
+class AssemblyBTResult:
     """
     Behavior Tree class for assembling behavior
     - Manage the current goal and state for the controller 
@@ -370,8 +374,8 @@ class AssemblyBT:
     def __init__(self, physics, eef, hole):
         # py_trees.logging.level = py_trees.logging.Level.DEBUG        
         self.counter = 0 # 
-        self.update_period = 10
-        self.state = 0
+        self.update_period = 1
+        # self.state = 0
         self.success = False
         self.terminate = False
         # Create Behaviors
@@ -380,19 +384,19 @@ class AssemblyBT:
         assemble = Assemble("assemble")
         rotate = Rotate("rotate")
         # Sub-sequence for move and assemble
-        move_and_assemble = py_trees.composites.Sequence(name="move_and_assemble", memory=True)
-        move_and_assemble.add_children([move_to_hole, assemble])
+        # move_and_assemble = py_trees.composites.Sequence(name="move_and_assemble", memory=True)
+        # move_and_assemble.add_children([move_to_hole, assemble])
 
-        # Retry decorator around the move-and-assemble sequence
-        retry_move_and_assemble = py_trees.decorators.Retry(
-            name="Retry_Move_And_Assemble",
-            child=move_and_assemble,
-            num_failures=999  # adjust as needed
-        )
+        # # Retry decorator around the move-and-assemble sequence
+        # retry_move_and_assemble = py_trees.decorators.Retry(
+        #     name="Retry_Move_And_Assemble",
+        #     child=move_and_assemble,
+        #     num_failures=999  # adjust as needed
+        # )
 
         # Top-level sequence
         assembly_seq = py_trees.composites.Sequence(name="assembly_seq", memory=True)
-        assembly_seq.add_children([set_up, retry_move_and_assemble, rotate])
+        assembly_seq.add_children([set_up, move_to_hole, assemble, rotate])
         
 
         self.bt = assembly_seq
@@ -406,12 +410,13 @@ class AssemblyBT:
     def run(self):
         self.counter += 1
         self.command = self.bt.children[0].blackboard.command
-        self.state = self.bt.children[0].blackboard.state
+        # self.state = self.bt.children[0].blackboard.state_result
         self.success = self.bt.children[0].blackboard.success
         self.terminate = self.bt.children[0].blackboard.terminate
         if self.counter % self.update_period == 0: 
             self.bt.tick_once()
-        return self.command, self.state, self.success, self.terminate # 
+        print("state: ", self.bt.children[0].blackboard.state_result)
+        return self.command, self.bt.children[0].blackboard.state_result, self.success, self.terminate # 
 
     def reset(self):
         pass
