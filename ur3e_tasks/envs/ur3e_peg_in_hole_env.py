@@ -201,7 +201,8 @@ class UR3ePegInHoleEnv(gym.Env):
         # only called at reset
         return {
             "learning_stage":self.learning_stage,
-            "intermediate_target_pos":self.intermediate_target_pos}
+            "intermediate_target_pos":self.intermediate_target_pos,
+            "hole_pos_real":self._hole_pos_base}
 
     def reset(self, seed=None, options=None) -> tuple:
         super().reset(seed=seed)
@@ -369,11 +370,12 @@ class UR3ePegInHoleEnv(gym.Env):
         info = {
             "learning_stage":self.learning_stage,
             "intermediate_target_pos":self.intermediate_target_pos,
+            "hole_pos_real":self._hole_pos_base,
             "forces":observation[:3],
             "torques":observation[3:6],
             "peg_end_pos":observation[6:9],
             "peg_end_quat":observation[9:13],
-            "hole_pos":observation[13:16],
+            "hole_pos_obs":observation[13:16],
             "hole_quat":observation[16:20],
             "joint_pos":observation[20:],
             "reward_distance": reward_list[0],
