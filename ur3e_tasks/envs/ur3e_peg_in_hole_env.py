@@ -47,7 +47,7 @@ class UR3ePegInHoleEnv(gym.Env):
         # Define action space
         # action_space = [vx, vy, vz, wx, wy] defined in the world frame
         # self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
-        self.act_limit = np.array([0.1, 0.1, 0.1, 0.1, 0.1])
+        self.act_limit = np.array([0.1, 0.1, 0.1, 0.1, 0.1]) ## NARCIS --> Make sure that this velocity matches the real robot
         self.action_space = spaces.Box(
             low=-self.act_limit, 
             high=self.act_limit, 
@@ -189,6 +189,7 @@ class UR3ePegInHoleEnv(gym.Env):
         ## joint positions
         joint_pos = self._physics.data.qpos.copy()
 
+        ## NARCIS --> Normalize observations?
         return np.concatenate((sensor_force, 
                                sensor_torque, 
                                self._peg_end_pos_base,
@@ -224,6 +225,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
 
         # reset physics
+        ## NARIS --> Randomize initial arm position?
         with self._physics.reset_context():
             # put arm in a reasonable starting position
             self._physics.bind(self._arm.joints).qpos = [
@@ -347,7 +349,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
-        for _ in range(25):
+        for _ in range(25): ## NARCIS --> Make sure that this frequancy maches the real robot 
             self._controller.run(target_vel)
             # step physics
             self._physics.step()
