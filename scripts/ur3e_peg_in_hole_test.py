@@ -73,7 +73,7 @@ def generate_target_vel(obs,target):
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
-stage = 9
+stage = 1
 env.unwrapped.set_learning_stage(stage)
 
 max_learning_stage = env.unwrapped.curriculum.final_stage
@@ -101,13 +101,10 @@ while True:
     # Choose a random action from the available action space
     # action = env.action_space.sample()
     action,target = generate_target_vel(observation,target)
-    # action = np.array([-0.3,0.3,-0.5,0.0,0.0])
-    # print("action = ", action)
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
     total_ep_reward += reward
-    # print("observation = ", observation)
-    # print("reward = ", reward)
+
     # Check if the episode is over (terminated) or max steps reached (truncated)
     if terminated or truncated:
         # logging

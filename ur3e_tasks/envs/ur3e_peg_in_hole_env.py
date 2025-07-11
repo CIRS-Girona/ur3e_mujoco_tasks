@@ -55,9 +55,10 @@ class UR3ePegInHoleEnv(gym.Env):
             dtype=np.float64
         )
 
+        self._viewer = None
         assert render_mode is None or render_mode in self.metadata["render_modes"]
         self._render_mode = render_mode
-        self.show_cam = False
+
         ############################
         # create MJCF model
         ############################
@@ -67,11 +68,6 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # set randomizer
         self._randomizer = DomainRandomizer(self._arena._mjcf_model)
-
-        # mocap target that OSC will try to follow
-        self._target = Target(self._arena.mjcf_model)
-
-       
 
         ### ur3e arm
         self._arm = Arm(
@@ -100,9 +96,7 @@ class UR3ePegInHoleEnv(gym.Env):
             self._arm.mjcf_model, pos=[0,0,1.1], quat=[0.7071068, 0, 0, -0.7071068]
         )
 
-
         # Store hole properties
-        # self._peg = self._arena.mjcf_model.find('joint', "peg_freejoint")
         self._hole = self._arena.mjcf_model.find('body', "hole")
         self._hole_frame = self._arena.mjcf_model.find('body','hole_frame')
 
@@ -117,38 +111,6 @@ class UR3ePegInHoleEnv(gym.Env):
                 contype=0,
                 group=2
             )
-        
-        ######################
-        
-        # # generate model
-        # self._physics = mjcf.Physics.from_mjcf_model(self._arena.mjcf_model)
-
-        # # store original position of hole
-        # self._hole_pos_default = self._physics.bind(self._hole).xpos.copy()
-        # self._hole_quat_default = self._physics.bind(self._hole).xquat.copy()
-
-        # # Camera 
-        # # self._camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "fixed_camera")
-        # # self._hand_camera = Camera([400,400],self._physics.model.ptr,self._physics.data.ptr, "ur3e/hand_camera")
-
-        # # set up controller
-        # self.joint_torque_limits = np.array([54.0,54.0,28.0,9.0,9.0,9.0])
-        # self._controller = EEFVelocityController(
-        #     physics=self._physics,
-        #     joints=self._arm.joints,
-        #     eef_site=self._arm.eef_site,
-        #     min_effort=-self.joint_torque_limits,
-        #     max_effort=self.joint_torque_limits,
-        #     kv=120 # TODO: tune this parameter
-        # )
-
-        # # for GUI and time keeping
-        # self._timestep = self._physics.model.opt.timestep
-        self._viewer = None
-        # self._step_start = None
-        # self.i = 0
-
-        ######################
 
         # compile model now if visualization is not needed
         # (to avoid creating new physics over and over again)
@@ -179,8 +141,6 @@ class UR3ePegInHoleEnv(gym.Env):
 
         peg_end_rot = self._physics.bind(self._peg_end).xmat.copy() # rotation matrix
         self._peg_end_rot = peg_end_rot.reshape(3,3)
-
-        # peg_end_quat = self._physics.bind(self._peg_end).xquat.copy() #wxyz
 
         self._peg_end_pos_base, self._peg_end_quat_base = self.convert_to_base_frame(pos=self._peg_end_pos.copy(),
                                                                                      rot = self._peg_end_rot.copy(),
@@ -251,8 +211,6 @@ class UR3ePegInHoleEnv(gym.Env):
             self._hole_pos = self._physics.bind(self._hole_frame).xpos.copy() 
             self._hole_rot = self._physics.bind(self._hole_frame).xmat.copy()
             self._hole_rot = self._hole_rot.reshape(3,3)
-            # self._hole_quat = self._physics.bind(self._hole_frame).xquat.copy() # format: wxzy
-            # self._hole_quat_xyzw = [self._hole_quat[1], self._hole_quat[2], self._hole_quat[3], self._hole_quat[0]]
 
             # transform hole frame pose from world frame to robot base frame
             self._hole_pos_base, self._hole_quat_base = self.convert_to_base_frame(pos=self._hole_pos.copy(),
@@ -269,16 +227,6 @@ class UR3ePegInHoleEnv(gym.Env):
             else:
                 self._hole_pos_obs = self._hole_pos.copy()
                 self._hole_pos_base_obs = self._hole_pos_base.copy()
-
-            ######################################################
-            # # # debugging
-            # print("hole_pos", self._hole_pos)
-            # # print("pos_noise", pos_noise)
-            # print("hole_pos_obs", self._hole_pos_obs)
-
-            # print("hole_pos_base", self._hole_pos_base)
-            # print("hole_pos_base_obs", self._hole_pos_base_obs)
-            ######################################################
             
             # reset gravity back to normal
             self._physics.model.opt.gravity = [0,0,-9.8]
@@ -356,18 +304,12 @@ class UR3ePegInHoleEnv(gym.Env):
             # render frame
             if self._render_mode == "human":
                 self._render_frame()
-
-        # print("i = ", self.i)
         
         # get observation
         observation = self._get_obs()
 
         ## Reward function
         reward, terminated, reward_list, success = self._get_reward(observation,action)
-
-        # print(f"action = {action}")
-        # print(f"observation = {observation}")
-        # print(f"reward = {reward}")
         
         info = {
             "learning_stage":self.learning_stage,
@@ -525,7 +467,6 @@ class UR3ePegInHoleEnv(gym.Env):
         qfrc_applied = self._physics.data.qfrc_applied # applied by the controller
 
         total_joint_torques = qfrc_passive + qfrc_applied
-        # print(f"total joint torques = {total_joint_torques}")        
 
         joint_safety_violation = np.any(np.abs(total_joint_torques) >= self.joint_torque_limits)
 

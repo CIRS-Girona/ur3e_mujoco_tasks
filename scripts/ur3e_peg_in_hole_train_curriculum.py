@@ -29,16 +29,13 @@ def parse_arguments():
 
     parser.add_argument('--continue-training', action='store_true', help='Continue training from a saved model')
     parser.add_argument('--starting-stage', type=int, required=False, default=1, help='Curriculum learning stage to start training with')
-    # parser.add_argument('--enable-log', action='store_true', help='Enable logging.')
 
     # Parse arguments
     args = parser.parse_args()
 
-    # return args.algorithm, args.save_filename, args.render, args.enable_log
     return args
 
 def main():
-    # algorithm, filename, render, logging = parse_arguments()
     args = parse_arguments()
 
     render_mode = 'human' if args.render else None
@@ -48,8 +45,6 @@ def main():
 
     # set environment learning stage
     env.unwrapped.set_learning_stage(args.starting_stage)
-
-    # check_env(env)
 
     ## Training Phase
     # directory and file name to save trained model
