@@ -24,11 +24,11 @@ def parse_arguments():
     # Define arguments
     parser.add_argument('--algorithm', type=str, required=True, help='The algorithm to use (SAC, TD3)')
     parser.add_argument('--filename', type=str, required=True, help='The name of the folder to save the model to, or if --continue-training is enabled, the name of folder to load model.')
-    parser.add_argument('--total-timesteps', type=int, required=False, default=10000, help='Total timesteps to train')
+    parser.add_argument('--total-timesteps', type=int, required=False, default=1000000, help='Total timesteps to train (default=1000000).')
     parser.add_argument('--render', action='store_true', help='Enable renderring.')
 
-    parser.add_argument('--continue-training', action='store_true', help='Continue training from a saved model')
-    parser.add_argument('--starting-stage', type=int, required=False, default=1, help='Curriculum learning stage to start training with')
+    parser.add_argument('--continue-training', action='store_true', help='Continue training from a saved model.')
+    parser.add_argument('--starting-stage', type=int, required=False, default=1, help='Curriculum learning stage to start training with (default=1).')
 
     # Parse arguments
     args = parser.parse_args()
