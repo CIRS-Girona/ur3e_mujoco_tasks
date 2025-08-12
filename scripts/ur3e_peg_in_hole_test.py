@@ -8,7 +8,7 @@ from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, q
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
-    max_episode_steps=250, # maximum number of steps per episode
+    max_episode_steps=500, # maximum number of steps per episode
 )
 
 def invert_rotation(rot_matrix):
@@ -61,10 +61,10 @@ def generate_target_vel(obs,target):
         pos_error = intermediate_pt_wrt_peg_pos # take intermediate point
 
     control_error = np.concatenate([pos_error,ori_error])
-    target_vel = 1.2 * control_error
+    target_vel = 0.5 * control_error
 
     # clip target vel
-    limits = np.array([0.1,0.1,0.1,0.1,0.1])
+    limits = 0.1*np.array([0.1,0.1,0.1,0.1,0.1])
     return np.clip(target_vel[:5],limits*-1,limits), target
 
 ###############
@@ -73,7 +73,7 @@ def generate_target_vel(obs,target):
 
 # Create the environment with rendering in human mode
 env = gymnasium.make('ur3e_tasks/UR3ePegInHoleEnv-v0', render_mode='human')
-stage = 1
+stage = 9
 env.unwrapped.set_learning_stage(stage)
 
 max_learning_stage = env.unwrapped.curriculum.final_stage
@@ -101,6 +101,7 @@ while True:
     # Choose a random action from the available action space
     # action = env.action_space.sample()
     action,target = generate_target_vel(observation,target)
+    print("action = ",action)
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
     total_ep_reward += reward

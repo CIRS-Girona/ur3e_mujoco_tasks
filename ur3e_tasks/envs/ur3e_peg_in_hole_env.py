@@ -46,8 +46,7 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # Define action space
         # action_space = [vx, vy, vz, wx, wy] defined in the world frame
-        # self.act_limit = np.array([0.2, 0.2, 0.2, 0.1, 0.1])
-        self.act_limit = np.array([0.1, 0.1, 0.1, 0.1, 0.1]) ## NARCIS --> Make sure that this velocity matches the real robot
+        self.act_limit = 0.1*np.array([0.1, 0.1, 0.1, 0.1, 0.1]) # multiplied by 0.1 to match the real robot
         self.action_space = spaces.Box(
             low=-self.act_limit, 
             high=self.act_limit, 
@@ -67,7 +66,6 @@ class UR3ePegInHoleEnv(gym.Env):
         self._arena = PegInHoleArena()
 
         # set randomizer
-        # self._randomizer = DomainRandomizer(self._arena._mjcf_model)
         self._randomizer = PegInHoleRandomizer(self._arena._mjcf_model)
 
         ### ur3e arm
@@ -129,7 +127,7 @@ class UR3ePegInHoleEnv(gym.Env):
         self.prev_learning_stage = 0
 
         # attribute related to hole position noise
-        self.pos_noise = 0.005
+        self.pos_noise = 0.003
 
 
     def _get_obs(self) -> np.ndarray:
@@ -298,7 +296,8 @@ class UR3ePegInHoleEnv(gym.Env):
 
         # run velocity controller to move with a target velocity
         # each action is executed 10 times before getting new observation
-        for _ in range(25): ## NARCIS --> Make sure that this frequancy maches the real robot 
+        # NOTE: 1 physics step = 0.001 seconds
+        for _ in range(100): # 100*0.001 = 0.1 s --> 10 Hz in real robot
             self._controller.run(target_vel)
             # step physics
             self._physics.step()
@@ -421,7 +420,7 @@ class UR3ePegInHoleEnv(gym.Env):
         terminated = False
         success = False # flag to indicate episode is successful
         if task_completed:
-            reward = 100
+            reward = 200
             success = True
             terminated = True
         elif safety_violation:
