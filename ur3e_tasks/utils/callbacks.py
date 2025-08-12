@@ -3,7 +3,7 @@ from collections import deque
 from stable_baselines3.common.callbacks import BaseCallback
 from torch.utils.tensorboard import SummaryWriter
 
-class SuccessTrackerCallback(BaseCallback):
+class CurriculumLearningCallback(BaseCallback):
     def __init__(
         self,
         n_episodes=100,
@@ -12,7 +12,7 @@ class SuccessTrackerCallback(BaseCallback):
         save_path="models",
         verbose=0,
     ):
-        super(SuccessTrackerCallback, self).__init__(verbose)
+        super(CurriculumLearningCallback, self).__init__(verbose)
         self.n_episodes = n_episodes
         self.next_stage_threshold = next_stage_threshold
         self.success_history = deque(maxlen=n_episodes)

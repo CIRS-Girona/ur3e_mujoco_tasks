@@ -15,7 +15,7 @@ from ur3e_tasks.robots import Camera
 import cv2
 
 from ur3e_tasks.controllers import EEFVelocityController
-from ur3e_tasks.utils import DomainRandomizer
+from ur3e_tasks.utils.peg_in_hole_randomizer import PegInHoleRandomizer
 from manipulator_mujoco.utils.transform_utils import mat2quat, quat2axisangle, quat2mat, axisangle2quat
 from ur3e_tasks.utils.curriculum import CurriculumLearning
 
@@ -67,7 +67,8 @@ class UR3ePegInHoleEnv(gym.Env):
         self._arena = PegInHoleArena()
 
         # set randomizer
-        self._randomizer = DomainRandomizer(self._arena._mjcf_model)
+        # self._randomizer = DomainRandomizer(self._arena._mjcf_model)
+        self._randomizer = PegInHoleRandomizer(self._arena._mjcf_model)
 
         ### ur3e arm
         self._arm = Arm(
