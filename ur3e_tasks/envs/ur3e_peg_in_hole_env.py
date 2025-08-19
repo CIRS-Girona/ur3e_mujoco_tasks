@@ -186,15 +186,19 @@ class UR3ePegInHoleEnv(gym.Env):
         # reset physics
         ## NARIS --> Randomize initial arm position?
         with self._physics.reset_context():
-            # put arm in a reasonable starting position
-            self._physics.bind(self._arm.joints).qpos = [
-                -1.5707,
-                -1.5707,
-                1.5707,
-                -1.5707,
-                -1.5707,
-                0.0,
-            ]
+            # generate random initial joint positions
+            joint_pos_default = np.array([-1.5707,
+                                          -1.5707,
+                                          1.5707,
+                                          -1.5707,
+                                          -1.5707,
+                                          0.0]) # default values
+            joint_pos_init_random = self._randomizer.random_joint_position(joint_pos_default, 
+                                                                           bound=np.deg2rad(15))
+            
+            # initialize robot arm with randomized joint positions
+            self._physics.bind(self._arm.joints).qpos = joint_pos_init_random
+            
 
             # randomize hole position and orientation
             rand_pos = self._randomizer.get_random_ws_pos()

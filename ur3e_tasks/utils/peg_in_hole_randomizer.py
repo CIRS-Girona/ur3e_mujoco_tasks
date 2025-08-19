@@ -154,3 +154,18 @@ class PegInHoleRandomizer:
     def apply_height(self, arm_body,pos):
         # modify object postion in model
         self._model.find('body', arm_body)._set_attribute("pos",pos)
+    
+    def random_joint_position(self,default_joint_pos,bound=0.1):
+        '''
+            Generate randomized joint positions, based on a set of default joint positions.
+            This method basically adds noise to the default joint positions.
+
+            Arguments:
+            default_joint_pos (np array): default joint positions.
+            bound: boundary of noise added to the default joint positions.
+        '''
+
+        # generate noise
+        ee_init_pos_noise = np.random.uniform(-bound,bound,default_joint_pos.shape)
+
+        return default_joint_pos + ee_init_pos_noise

@@ -81,9 +81,9 @@ max_learning_stage = env.unwrapped.curriculum.final_stage
 # Reset the environment with a specific seed for reproducibility
 observation, info = env.reset(seed=42)
 
-print("info = ")
-for key in info.keys():
-    print(f"{key}: {info[key]}")
+# print("info = ")
+# for key in info.keys():
+#     print(f"{key}: {info[key]}")
 
 # Run simulation for a fixed number of steps
 # for _ in range(1000):
@@ -101,7 +101,6 @@ while True:
     # Choose a random action from the available action space
     # action = env.action_space.sample()
     action,target = generate_target_vel(observation,target)
-    print("action = ",action)
     # Take a step in the environment using the chosen action
     observation, reward, terminated, truncated, info = env.step(action)
     total_ep_reward += reward
