@@ -12,7 +12,7 @@ import argparse
 register(
     id="ur3e_tasks/UR3ePegInHoleEnv-v0",
     entry_point="ur3e_tasks.envs:UR3ePegInHoleEnv",
-    max_episode_steps=250, # maximum number of steps per episode
+    max_episode_steps=500, # maximum number of steps per episode
 )
 
 def parse_arguments():
